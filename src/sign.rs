@@ -109,14 +109,27 @@ pub fn sign(
     ]);
 
     let R = D + E * b;
-    let R_bytes = point_bytes(&R);
 
-    let c = scalar_from_hash(&[
-        b"FaFROST/secp256k1/SHA256/Hsig",
-        &vk_bytes,
-        &R_bytes,
-        &signing_package.message,
-    ]);
+    #[cfg(feature = "bip340")]
+    let r_is_odd = crate::bip340::has_odd_y(&R);
+
+    let c = {
+        #[cfg(feature = "bip340")]
+        {
+            let r_x = crate::bip340::x_only_bytes(&R);
+            let p_x = crate::bip340::x_only_bytes(&pubkeys.verifying_key);
+            crate::bip340::bip340_challenge_scalar(&r_x, &p_x, &signing_package.message)
+        }
+        #[cfg(not(feature = "bip340"))]
+        {
+            let R_bytes = point_bytes(&R);
+            scalar_from_hash(&[
+                &vk_bytes,
+                &R_bytes,
+                &signing_package.message,
+            ])
+        }
+    };
 
     let lambda_i = lagrange(key_package.identifier, &ids);
 
@@ -144,12 +157,25 @@ pub fn sign(
         blind += B_ij * delta(key_package.identifier, *j);
     }
 
-    let z =
-        c * lambda_i * key_package.signing_share + b * signer_nonces.e + signer_nonces.d + blind;
+    #[cfg(feature = "bip340")]
+    let nonce_contrib = if r_is_odd {
+        -(signer_nonces.d + b * signer_nonces.e)
+    } else {
+        signer_nonces.d + b * signer_nonces.e
+    };
+    #[cfg(not(feature = "bip340"))]
+    let nonce_contrib = signer_nonces.d + b * signer_nonces.e;
+
+    let z = c * lambda_i * key_package.signing_share + nonce_contrib + blind;
+
+    #[cfg(feature = "bip340")]
+    let sig_r = if r_is_odd { -R } else { R };
+    #[cfg(not(feature = "bip340"))]
+    let sig_r = R;
 
     SignatureShare {
         identifier: key_package.identifier,
-        R,
+        R: sig_r,
         z,
     }
 }

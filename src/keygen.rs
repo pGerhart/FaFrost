@@ -50,7 +50,19 @@ pub fn generate_with_dealer<R: RngCore + CryptoRng>(
     assert!(min_signers <= max_signers);
 
     let sk = Scalar::random(&mut *rng);
-    let verifying_key = ProjectivePoint::GENERATOR * sk;
+    let vk_raw = ProjectivePoint::GENERATOR * sk;
+
+    // BIP-340: the verifying key must have even y — negate sk so g^sk has even y.
+    // All shares are evaluations of a polynomial with sk as constant term, so
+    // negating sk here automatically normalises every share and commitment.
+    #[cfg(feature = "bip340")]
+    let (sk, verifying_key) = if crate::bip340::has_odd_y(&vk_raw) {
+        (-sk, -vk_raw)
+    } else {
+        (sk, vk_raw)
+    };
+    #[cfg(not(feature = "bip340"))]
+    let verifying_key = vk_raw;
 
     let pedersen_h = pedersen_generator();
     let mut coeffs = Vec::new();

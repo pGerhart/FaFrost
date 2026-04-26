@@ -3,6 +3,9 @@ name = "fafrost"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+bip340 = []
+
 [dependencies]
 bitcoin = "0.32"
 rand = "0.8"

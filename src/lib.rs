@@ -1,8 +1,10 @@
+pub mod bip340;
 pub mod ia;
 pub mod keygen;
 pub mod sign;
 pub mod verify;
 
+pub use bip340::*;
 pub use ia::*;
 pub use keygen::*;
 pub use sign::*;

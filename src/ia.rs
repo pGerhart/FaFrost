@@ -429,9 +429,30 @@ fn verify_wellformed_proof(
     let c = sig_challenge(signing_package, pubkeys);
     let lambda_i = lagrange(i, &ids);
 
-    let A = ProjectivePoint::GENERATOR * signature_share.z
-        + commitment_i.D * (-Scalar::ONE)
-        + commitment_i.E * (-b);
+    // A = G*z - D_i - b*E_i  (= G*(c·λi·sk_i + B_i^s) after nonces cancel).
+    // With bip340 and odd R the nonces in z were negated, so the signs flip.
+    let A = {
+        let base = ProjectivePoint::GENERATOR * signature_share.z;
+        #[cfg(feature = "bip340")]
+        {
+            let mut agg_d = ProjectivePoint::IDENTITY;
+            let mut agg_e = ProjectivePoint::IDENTITY;
+            for comm in signing_package.signing_commitments.values() {
+                agg_d += comm.D;
+                agg_e += comm.E;
+            }
+            let R_raw = agg_d + agg_e * b;
+            if crate::bip340::has_odd_y(&R_raw) {
+                base + commitment_i.D + commitment_i.E * b
+            } else {
+                base + commitment_i.D * (-Scalar::ONE) + commitment_i.E * (-b)
+            }
+        }
+        #[cfg(not(feature = "bip340"))]
+        {
+            base + commitment_i.D * (-Scalar::ONE) + commitment_i.E * (-b)
+        }
+    };
 
     let challenge = proof_challenge(
         signing_package,
@@ -539,15 +560,25 @@ fn sig_challenge(signing_package: &SigningPackage, pubkeys: &PublicKeyPackage) -
 
     let R = D + E * b;
 
-    let vk_bytes = point_bytes(&pubkeys.verifying_key);
-    let R_bytes = point_bytes(&R);
-
-    scalar_from_hash(&[
-        b"FaFROST/secp256k1/SHA256/Hsig",
-        &vk_bytes,
-        &R_bytes,
-        &signing_package.message,
-    ])
+    {
+        #[cfg(feature = "bip340")]
+        {
+            let r_x = crate::bip340::x_only_bytes(&R);
+            let p_x = crate::bip340::x_only_bytes(&pubkeys.verifying_key);
+            crate::bip340::bip340_challenge_scalar(&r_x, &p_x, &signing_package.message)
+        }
+        #[cfg(not(feature = "bip340"))]
+        {
+            let vk_bytes = point_bytes(&pubkeys.verifying_key);
+            let R_bytes = point_bytes(&R);
+            scalar_from_hash(&[
+                b"FaFROST/secp256k1/SHA256/Hsig",
+                &vk_bytes,
+                &R_bytes,
+                &signing_package.message,
+            ])
+        }
+    }
 }
 
 fn proof_challenge(
