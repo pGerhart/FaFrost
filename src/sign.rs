@@ -124,6 +124,7 @@ pub fn sign(
         {
             let R_bytes = point_bytes(&R);
             scalar_from_hash(&[
+                b"FaFROST/secp256k1/SHA256/Hsig",
                 &vk_bytes,
                 &R_bytes,
                 &signing_package.message,

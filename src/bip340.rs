@@ -3,12 +3,6 @@
 //! When the `bip340` Cargo feature is enabled, `keygen::generate_with_dealer`
 //! normalises the verifying key to even y, and `sign::sign` / `sign::verify`
 //! use the BIP-340 tagged-hash challenge and normalise R to even y.
-//!
-//! This module also provides standalone utilities for Bitcoin interoperability:
-//! - [`xonly_pubkey`]      — 32-byte x-only public key for a P2TR output
-//! - [`signature_to_bytes`] — serialise an aggregate signature to 64 bytes
-//! - [`bip340_verify_bytes`] — raw-bytes BIP-340 verification
-
 use k256::elliptic_curve::{
     PrimeField,
     ops::Reduce,
@@ -20,23 +14,19 @@ use sha2::{Digest, Sha256};
 use crate::keygen::PublicKeyPackage;
 use crate::sign::Signature;
 
-// ---------------------------------------------------------------------------
-// pub(crate) primitives — used by keygen.rs / sign.rs / verify.rs
-// ---------------------------------------------------------------------------
-
-pub(crate) fn has_odd_y(point: &ProjectivePoint) -> bool {
+pub fn has_odd_y(point: &ProjectivePoint) -> bool {
     let enc = point.to_affine().to_encoded_point(true);
     enc.as_bytes()[0] == 0x03
 }
 
-pub(crate) fn x_only_bytes(point: &ProjectivePoint) -> [u8; 32] {
+pub fn x_only_bytes(point: &ProjectivePoint) -> [u8; 32] {
     let enc = point.to_affine().to_encoded_point(false);
     let mut out = [0u8; 32];
     out.copy_from_slice(&enc.as_bytes()[1..33]);
     out
 }
 
-pub(crate) fn bip340_challenge_scalar(r_x: &[u8; 32], p_x: &[u8; 32], msg: &[u8; 32]) -> Scalar {
+pub fn bip340_challenge_scalar(r_x: &[u8; 32], p_x: &[u8; 32], msg: &[u8; 32]) -> Scalar {
     let mut data = [0u8; 96];
     data[..32].copy_from_slice(r_x);
     data[32..64].copy_from_slice(p_x);
