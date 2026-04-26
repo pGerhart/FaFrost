@@ -1,7 +1,9 @@
+pub mod ia;
 pub mod keygen;
 pub mod sign;
 pub mod verify;
 
+pub use ia::*;
 pub use keygen::*;
 pub use sign::*;
 pub use verify::*;
@@ -228,6 +230,9 @@ mod tests {
         std::panic::set_hook(Box::new(|_| {}));
         let result = std::panic::catch_unwind(|| aggregate(&signing_package, &signature_shares));
         std::panic::set_hook(prev_hook);
-        assert!(result.is_err(), "aggregate must reject incomplete signature shares");
+        assert!(
+            result.is_err(),
+            "aggregate must reject incomplete signature shares"
+        );
     }
 }
