@@ -2,7 +2,7 @@
 
 This is a reference implementation of a **fully adaptive secure threshold Schnorr signature scheme**, based on the work:
 
-**Fully Adaptive FROST in the Algebraic One-More Discrete Logarithm Model**
+**FaFROST: Practically Efficient Fully Adaptive Two-Round Threshold Schnorr Signatures**
 
 In this repository, we provide a full prototype of the construction using an *idealized key generation*.
 We implement the full FaFROST signing stack, including signing, verification, and identifiable aborts. All components are accompanied by tests that exercise the protocol and check correctness of the implementation.
