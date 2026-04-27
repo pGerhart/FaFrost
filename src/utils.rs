@@ -46,7 +46,7 @@ pub(crate) fn encode_signer_set(ids: &[Identifier]) -> Vec<u8> {
     out
 }
 
-pub(crate) fn encode_commitments(
+pub fn encode_commitments(
     commitments: &BTreeMap<Identifier, SigningCommitments>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
