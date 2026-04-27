@@ -60,7 +60,7 @@ cargo bench -- blinding_scalar
 
 HTML reports are written to `target/criterion/`.
 
-Our own benchmark results, measured on an Apple M3 Pro MacBook Pro with 26 GB RAM, are available in [`bench_results.txt`](bench_results.txt).
+Our own benchmark results, measured on an Apple M3 Pro MacBook Pro with 36 GB RAM, are available in [`bench_results.txt`](bench_results.txt).
 
 # Demo Transaction
 

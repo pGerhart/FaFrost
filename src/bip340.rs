@@ -54,17 +54,12 @@ fn lift_x(x_bytes: &[u8; 32]) -> Option<ProjectivePoint> {
 }
 
 /// 32-byte x-only public key for use in a `OP_1 <32-byte-key>` (P2TR) output.
-///
-/// Only meaningful when the `bip340` feature is enabled — the key is then
-/// guaranteed to have an even y-coordinate.
 pub fn xonly_pubkey(pubkeys: &PublicKeyPackage) -> [u8; 32] {
     x_only_bytes(&pubkeys.verifying_key)
 }
 
 /// Serialise an aggregate `Signature` to the 64-byte wire format expected by
 /// Bitcoin: `bytes(R_x) || bytes(s)`.
-///
-/// Only meaningful when the `bip340` feature is enabled.
 pub fn signature_to_bytes(sig: &Signature) -> [u8; 64] {
     assert!(!has_odd_y(&sig.R), "BIP340 signature R must have even y");
 
@@ -77,10 +72,7 @@ pub fn signature_to_bytes(sig: &Signature) -> [u8; 64] {
     out
 }
 
-/// Standalone BIP-340 verification from raw bytes — no FaFROST types needed.
-///
-/// `pubkey_x` — 32-byte x-only public key (as in a P2TR output).
-/// `sig`       — 64-byte signature `(R_x || s)`.
+/// Standalone BIP-340 verification from raw bytes
 pub fn bip340_verify_bytes(sig: &[u8; 64], msg: &[u8; 32], pubkey_x: &[u8; 32]) -> bool {
     let r_x: [u8; 32] = sig[..32].try_into().unwrap();
     let s_bytes: [u8; 32] = sig[32..].try_into().unwrap();

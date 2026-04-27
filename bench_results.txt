@@ -1,0 +1,133 @@
+Benchmark Results MBP M3 Pro, 36GB Ram 
+
+
+commit                  time:   [55.072 µs 55.095 µs 55.126 µs]
+                        change: [-2.4005% -1.3542% -0.6179%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 9 outliers among 100 measurements (9.00%)
+  2 (2.00%) low severe
+  2 (2.00%) high mild
+  5 (5.00%) high severe
+
+sign/full/4/32          time:   [153.69 µs 154.09 µs 154.44 µs]
+                        change: [-0.1486% +0.4014% +0.9252%] (p = 0.14 > 0.05)
+                        No change in performance detected.
+Found 1 outliers among 100 measurements (1.00%)
+  1 (1.00%) high mild
+sign/full/8/32          time:   [225.21 µs 226.00 µs 226.83 µs]
+                        change: [-0.2714% +0.2825% +0.8384%] (p = 0.32 > 0.05)
+                        No change in performance detected.
+sign/full/16/32         time:   [369.13 µs 370.63 µs 371.85 µs]
+                        change: [-2.0458% -1.5661% -1.0740%] (p = 0.00 < 0.05)
+                        Performance has improved.
+sign/full/32/64         time:   [642.30 µs 644.07 µs 646.31 µs]
+                        change: [-2.8673% -2.4366% -1.9849%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 11 outliers among 100 measurements (11.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  1 (1.00%) high mild
+  8 (8.00%) high severe
+sign/full/48/64         time:   [928.47 µs 933.48 µs 938.42 µs]
+                        change: [-3.2959% -2.8732% -2.3269%] (p = 0.00 < 0.05)
+                        Performance has improved.
+Found 17 outliers among 100 measurements (17.00%)
+  1 (1.00%) low mild
+  2 (2.00%) high mild
+  14 (14.00%) high severe
+Benchmarking sign/full/64/128: Warming up for 3.0000 s
+Warning: Unable to complete 100 samples in 5.0s. You may wish to increase target time to 6.2s, enable flat sampling, or reduce sample count to 60.
+sign/full/64/128        time:   [1.2126 ms 1.2188 ms 1.2249 ms]
+                        change: [-0.8987% -0.3289% +0.2428%] (p = 0.26 > 0.05)
+                        No change in performance detected.
+Found 24 outliers among 100 measurements (24.00%)
+  3 (3.00%) low severe
+  2 (2.00%) high mild
+  19 (19.00%) high severe
+
+aggregate/full/4/32     time:   [161.37 ns 161.50 ns 161.70 ns]
+                        change: [-0.4216% -0.1333% +0.1437%] (p = 0.40 > 0.05)
+                        No change in performance detected.
+Found 11 outliers among 100 measurements (11.00%)
+  5 (5.00%) high mild
+  6 (6.00%) high severe
+aggregate/full/8/32     time:   [365.97 ns 366.15 ns 366.41 ns]
+                        change: [-1.3121% -0.9347% -0.5523%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 12 outliers among 100 measurements (12.00%)
+  4 (4.00%) high mild
+  8 (8.00%) high severe
+aggregate/full/16/32    time:   [779.48 ns 780.07 ns 780.92 ns]
+                        change: [-0.2639% -0.0782% +0.1233%] (p = 0.44 > 0.05)
+                        No change in performance detected.
+Found 16 outliers among 100 measurements (16.00%)
+  6 (6.00%) high mild
+  10 (10.00%) high severe
+aggregate/full/32/64    time:   [1.6162 µs 1.6251 µs 1.6425 µs]
+                        change: [-0.3049% +0.0684% +0.5869%] (p = 0.80 > 0.05)
+                        No change in performance detected.
+Found 8 outliers among 100 measurements (8.00%)
+  2 (2.00%) high mild
+  6 (6.00%) high severe
+aggregate/full/48/64    time:   [2.4401 µs 2.4421 µs 2.4448 µs]
+                        change: [-0.3637% -0.1161% +0.1446%] (p = 0.39 > 0.05)
+                        No change in performance detected.
+Found 10 outliers among 100 measurements (10.00%)
+  1 (1.00%) low severe
+  2 (2.00%) high mild
+  7 (7.00%) high severe
+aggregate/full/64/128   time:   [3.2793 µs 3.2882 µs 3.2971 µs]
+                        change: [-0.2107% +0.0228% +0.2470%] (p = 0.85 > 0.05)
+                        No change in performance detected.
+Found 14 outliers among 100 measurements (14.00%)
+  1 (1.00%) low mild
+  4 (4.00%) high mild
+  9 (9.00%) high severe
+
+blinding_scalar/blinding/4/32
+                        time:   [1.1770 µs 1.1968 µs 1.2188 µs]
+                        change: [+2.3388% +3.4936% +4.5684%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 8 outliers among 100 measurements (8.00%)
+  4 (4.00%) high mild
+  4 (4.00%) high severe
+blinding_scalar/blinding/8/32
+                        time:   [3.4193 µs 3.4417 µs 3.4732 µs]
+                        change: [+6.4454% +7.1006% +7.9271%] (p = 0.00 < 0.05)
+                        Performance has regressed.
+Found 6 outliers among 100 measurements (6.00%)
+  1 (1.00%) low severe
+  3 (3.00%) high mild
+  2 (2.00%) high severe
+blinding_scalar/blinding/16/32
+                        time:   [6.7289 µs 6.7639 µs 6.8106 µs]
+                        change: [+0.8214% +1.5792% +2.5158%] (p = 0.00 < 0.05)
+                        Change within noise threshold.
+Found 16 outliers among 100 measurements (16.00%)
+  1 (1.00%) low severe
+  7 (7.00%) high mild
+  8 (8.00%) high severe
+blinding_scalar/blinding/32/64
+                        time:   [13.384 µs 13.401 µs 13.419 µs]
+                        change: [-0.0837% +0.1551% +0.3675%] (p = 0.19 > 0.05)
+                        No change in performance detected.
+Found 11 outliers among 100 measurements (11.00%)
+  2 (2.00%) low severe
+  5 (5.00%) high mild
+  4 (4.00%) high severe
+blinding_scalar/blinding/48/64
+                        time:   [20.406 µs 20.424 µs 20.446 µs]
+                        change: [-0.0396% +0.2043% +0.4250%] (p = 0.08 > 0.05)
+                        No change in performance detected.
+Found 16 outliers among 100 measurements (16.00%)
+  4 (4.00%) high mild
+  12 (12.00%) high severe
+blinding_scalar/blinding/64/128
+                        time:   [26.999 µs 27.022 µs 27.052 µs]
+                        change: [+0.0595% +0.3341% +0.5999%] (p = 0.01 < 0.05)
+                        Change within noise threshold.
+Found 12 outliers among 100 measurements (12.00%)
+  1 (1.00%) low severe
+  1 (1.00%) low mild
+  3 (3.00%) high mild
+  7 (7.00%) high severe
