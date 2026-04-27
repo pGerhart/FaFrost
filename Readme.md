@@ -50,7 +50,7 @@ The repository includes [Criterion](https://github.com/bheisler/criterion.rs) be
 | `aggregate/full` | Share aggregation |
 | `blinding_scalar/blinding` | Pairwise blinding computation in isolation |
 
-All `sign`, `aggregate`, and `blinding_scalar` benchmarks are parameterised over three signer-set configurations: **4/32**, **8/64**, and **16/128** (min-signers/max-signers).
+All `sign`, `aggregate`, and `blinding_scalar` benchmarks are parameterised over six signer-set configurations (min-signers/max-signers): **4/32**, **8/32**, **16/32**, **32/64**, **48/64**, **64/128**.
 
 ```
 cargo bench
