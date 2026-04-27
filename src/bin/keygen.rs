@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "2".to_string())
         .parse::<u16>()?;
 
-    let (_shares, pubkeys, stored_key) =
+    let (_shares, _pubkeys, stored_key) =
         generate_with_dealer_and_write_key_yaml(&path, max_signers, min_signers, &mut rng)?;
 
     println!("wrote key file: {}", path);

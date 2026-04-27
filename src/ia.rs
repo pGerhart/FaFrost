@@ -1,16 +1,17 @@
+#![allow(non_snake_case)]
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::vec::Vec;
 
-use k256::elliptic_curve::{Field, PrimeField};
+use k256::elliptic_curve::Field;
 use k256::{ProjectivePoint, Scalar};
 use rand_core::{CryptoRng, RngCore};
 
-use crate::keygen::{
-    Identifier, KeyPackage, PublicKeyPackage, hash_pairwise_key_commitment, pedersen_commit,
-};
-use crate::sign::{
-    SignatureShare, SigningPackage, delta, encode_commitments, encode_signer_set, lagrange,
-    point_bytes, scalar_from_hash,
+use crate::keygen::{Identifier, KeyPackage, PublicKeyPackage};
+use crate::sign::{SignatureShare, SigningPackage};
+use crate::utils::{
+    delta, encode_commitments, encode_signer_set, hash_pairwise_key_commitment, lagrange,
+    pedersen_commit, point_bytes, scalar_bytes, scalar_from_hash,
 };
 
 #[derive(Clone)]
@@ -639,9 +640,6 @@ fn ia_view_bytes(
     out
 }
 
-fn scalar_bytes(s: &Scalar) -> [u8; 32] {
-    s.to_repr().into()
-}
 #[test]
 fn identifiable_abort_finds_tampered_share() {
     use std::collections::{BTreeMap, BTreeSet};

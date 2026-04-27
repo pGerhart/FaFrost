@@ -1,10 +1,15 @@
+#![allow(non_snake_case)]
+
+use crate::utils::{
+    delta, encode_commitments, encode_signer_set, lagrange, point_bytes, scalar_from_hash,
+};
 use std::collections::BTreeMap;
 use std::vec::Vec;
 
-use k256::elliptic_curve::{Field, ops::Reduce, sec1::ToEncodedPoint};
-use k256::{FieldBytes, ProjectivePoint, Scalar, U256};
+use k256::elliptic_curve::Field;
+use k256::{ProjectivePoint, Scalar};
+
 use rand_core::{CryptoRng, RngCore};
-use sha2::{Digest, Sha256};
 
 use crate::keygen::{Identifier, KeyPackage, PartialVerificationKey, PublicKeyPackage};
 
@@ -32,6 +37,22 @@ pub struct SignatureShare {
     pub identifier: Identifier,
     pub R: ProjectivePoint,
     pub z: Scalar,
+}
+
+impl SignatureShare {
+    pub fn new(identifier: Identifier, R: ProjectivePoint, nonce: Scalar, z_rest: Scalar) -> Self {
+        #[cfg(feature = "bip340")]
+        let (R, nonce) = if crate::bip340::has_odd_y(&R) {
+            (-R, -nonce)
+        } else {
+            (R, nonce)
+        };
+        Self {
+            identifier,
+            R,
+            z: z_rest + nonce,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -110,75 +131,15 @@ pub fn sign(
 
     let R = D + E * b;
 
-    #[cfg(feature = "bip340")]
-    let r_is_odd = crate::bip340::has_odd_y(&R);
-
-    let c = {
-        #[cfg(feature = "bip340")]
-        {
-            let r_x = crate::bip340::x_only_bytes(&R);
-            let p_x = crate::bip340::x_only_bytes(&pubkeys.verifying_key);
-            crate::bip340::bip340_challenge_scalar(&r_x, &p_x, &signing_package.message)
-        }
-        #[cfg(not(feature = "bip340"))]
-        {
-            let R_bytes = point_bytes(&R);
-            scalar_from_hash(&[
-                b"FaFROST/secp256k1/SHA256/Hsig",
-                &vk_bytes,
-                &R_bytes,
-                &signing_package.message,
-            ])
-        }
-    };
+    let c = pubkeys.challenge_scalar(&R, &signing_package.message);
 
     let lambda_i = lagrange(key_package.identifier, &ids);
 
-    // This is extra compared to non-adaptive Frost: Compute the blinding values
-    let mut blind = Scalar::ZERO;
+    let blind = key_package.blinding_scalar(&ids, &commitments_bytes, &signing_package.message);
 
-    for j in &ids {
-        if *j == key_package.identifier {
-            continue;
-        }
-
-        let k_ij = key_package
-            .pairwise_keys
-            .get(j)
-            .expect("missing pairwise key");
-
-        let B_ij = scalar_from_hash(&[
-            b"FaFROST/secp256k1/SHA256/Hs",
-            k_ij,
-            &commitments_bytes,
-            &signing_package.message,
-            &encode_signer_set(&ids),
-        ]);
-
-        blind += B_ij * delta(key_package.identifier, *j);
-    }
-
-    #[cfg(feature = "bip340")]
-    let nonce_contrib = if r_is_odd {
-        -(signer_nonces.d + b * signer_nonces.e)
-    } else {
-        signer_nonces.d + b * signer_nonces.e
-    };
-    #[cfg(not(feature = "bip340"))]
-    let nonce_contrib = signer_nonces.d + b * signer_nonces.e;
-
-    let z = c * lambda_i * key_package.signing_share + nonce_contrib + blind;
-
-    #[cfg(feature = "bip340")]
-    let sig_r = if r_is_odd { -R } else { R };
-    #[cfg(not(feature = "bip340"))]
-    let sig_r = R;
-
-    SignatureShare {
-        identifier: key_package.identifier,
-        R: sig_r,
-        z,
-    }
+    let nonce = signer_nonces.d + b * signer_nonces.e;
+    let z_rest = c * lambda_i * key_package.signing_share + blind;
+    SignatureShare::new(key_package.identifier, R, nonce, z_rest)
 }
 
 pub fn aggregate(
@@ -209,64 +170,50 @@ pub fn aggregate(
     }
 }
 
-pub(crate) fn lagrange(i: Identifier, signer_set: &[Identifier]) -> Scalar {
-    let i_s = Scalar::from(i as u64);
-    let mut out = Scalar::ONE;
+impl KeyPackage {
+    pub fn blinding_scalar(
+        &self,
+        ids: &[Identifier],
+        commitments_bytes: &[u8],
+        msg: &[u8; 32],
+    ) -> Scalar {
+        let mut blind = Scalar::ZERO;
 
-    for j in signer_set {
-        if *j == i {
-            continue;
+        for j in ids {
+            if *j == self.identifier {
+                continue;
+            }
+
+            let k_ij = self.pairwise_keys.get(j).expect("missing pairwise key");
+
+            let B_ij = scalar_from_hash(&[
+                b"FaFROST/secp256k1/SHA256/Hs",
+                k_ij,
+                commitments_bytes,
+                msg,
+                &encode_signer_set(ids),
+            ]);
+
+            blind += B_ij * delta(self.identifier, *j);
         }
 
-        let j_s = Scalar::from(*j as u64);
-        out *= j_s * (j_s - i_s).invert().unwrap();
+        blind
     }
-
-    out
 }
 
-pub(crate) fn delta(i: Identifier, j: Identifier) -> Scalar {
-    if i > j { Scalar::ONE } else { -Scalar::ONE }
-}
-
-pub(crate) fn encode_signer_set(ids: &[Identifier]) -> Vec<u8> {
-    let mut out = Vec::new();
-
-    for id in ids {
-        out.extend_from_slice(&id.to_be_bytes());
+impl PublicKeyPackage {
+    pub fn challenge_scalar(&self, r: &ProjectivePoint, msg: &[u8; 32]) -> Scalar {
+        #[cfg(feature = "bip340")]
+        {
+            let r_x = crate::bip340::x_only_bytes(r);
+            let p_x = crate::bip340::x_only_bytes(&self.verifying_key);
+            return crate::bip340::bip340_challenge_scalar(&r_x, &p_x, msg);
+        }
+        #[cfg(not(feature = "bip340"))]
+        {
+            let vk_bytes = point_bytes(&self.verifying_key);
+            let r_bytes = point_bytes(r);
+            scalar_from_hash(&[b"FaFROST/secp256k1/SHA256/Hsig", &vk_bytes, &r_bytes, msg])
+        }
     }
-
-    out
-}
-
-pub(crate) fn encode_commitments(
-    commitments: &BTreeMap<Identifier, SigningCommitments>,
-) -> Vec<u8> {
-    let mut out = Vec::new();
-
-    for (id, c) in commitments {
-        out.extend_from_slice(&id.to_be_bytes());
-        out.extend_from_slice(&point_bytes(&c.D));
-        out.extend_from_slice(&point_bytes(&c.E));
-    }
-
-    out
-}
-
-pub(crate) fn scalar_from_hash(parts: &[&[u8]]) -> Scalar {
-    let mut h = Sha256::new();
-
-    for p in parts {
-        h.update(p);
-    }
-
-    let bytes: [u8; 32] = h.finalize().into();
-    <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(&bytes))
-}
-
-pub(crate) fn point_bytes(point: &ProjectivePoint) -> [u8; 33] {
-    let enc = point.to_affine().to_encoded_point(true);
-    let mut out = [0u8; 33];
-    out.copy_from_slice(enc.as_bytes());
-    out
 }

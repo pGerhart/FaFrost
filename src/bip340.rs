@@ -53,10 +53,6 @@ fn lift_x(x_bytes: &[u8; 32]) -> Option<ProjectivePoint> {
     affine.map(ProjectivePoint::from)
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /// 32-byte x-only public key for use in a `OP_1 <32-byte-key>` (P2TR) output.
 ///
 /// Only meaningful when the `bip340` feature is enabled — the key is then

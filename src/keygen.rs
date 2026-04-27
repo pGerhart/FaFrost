@@ -1,24 +1,16 @@
+#![allow(non_snake_case)]
+
+use crate::utils::{
+    hash_pairwise_key_commitment, pedersen_commit, pedersen_generator, point_bytes,
+    scalar_from_hex, scalar_to_hex,
+};
+use k256::{ProjectivePoint, Scalar, elliptic_curve::Field};
+use rand_core::{CryptoRng, RngCore};
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::vec::Vec;
-
-use k256::{
-    FieldBytes, ProjectivePoint, Scalar, Secp256k1, U256,
-    elliptic_curve::{
-        Field, PrimeField,
-        group::prime::PrimeCurveAffine,
-        hash2curve::{ExpandMsgXmd, GroupDigest},
-        ops::Reduce,
-        sec1::ToEncodedPoint,
-    },
-};
-
-use rand_core::{CryptoRng, RngCore};
-
-use sha2::{Digest, Sha256};
-
-use serde::{Deserialize, Serialize};
 
 pub type Identifier = u16;
 
@@ -292,57 +284,4 @@ pub fn generate_with_dealer_and_write_key_yaml<P: AsRef<Path>, R: RngCore + Cryp
         generate_with_dealer_from_secret(normalized_secret_key, max_signers, min_signers, rng);
 
     Ok((shares, pubkeys, stored_key))
-}
-
-pub fn pedersen_commit(value: Scalar, blinding: Scalar, h: ProjectivePoint) -> ProjectivePoint {
-    ProjectivePoint::GENERATOR * value + h * blinding
-}
-
-pub fn hash_pairwise_key_commitment(k_ij: &[u8; 32]) -> [u8; 32] {
-    let mut h = Sha256::new();
-    h.update(b"FaFROST/secp256k1/SHA256/Hvk");
-    h.update(k_ij);
-    h.finalize().into()
-}
-
-pub fn scalar_to_hex(scalar: &Scalar) -> String {
-    let bytes: [u8; 32] = scalar.to_repr().into();
-    hex::encode(bytes)
-}
-
-pub fn scalar_from_hex(hex_string: &str) -> Result<Scalar, Box<dyn std::error::Error>> {
-    let bytes_vec = hex::decode(hex_string)?;
-    if bytes_vec.len() != 32 {
-        return Err("scalar hex must decode to exactly 32 bytes".into());
-    }
-
-    let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(&bytes_vec);
-
-    let maybe_scalar = Scalar::from_repr(FieldBytes::from(bytes));
-    Option::<Scalar>::from(maybe_scalar)
-        .ok_or_else(|| "scalar is not canonical modulo secp256k1 order".into())
-}
-
-pub fn scalar_from_bytes_mod_order(bytes: &[u8; 32]) -> Scalar {
-    <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(bytes))
-}
-
-pub fn point_bytes(point: &ProjectivePoint) -> [u8; 33] {
-    let enc = point.to_affine().to_encoded_point(true);
-    let mut out = [0u8; 33];
-    out.copy_from_slice(enc.as_bytes());
-    out
-}
-
-pub fn pedersen_generator() -> ProjectivePoint {
-    let h = Secp256k1::hash_from_bytes::<ExpandMsgXmd<Sha256>>(
-        &[b"FaFROST/secp256k1/SHA256/PedersenH"],
-        &[b"FaFROST/secp256k1/SHA256"],
-    )
-    .expect("hash to curve failed");
-
-    assert!(bool::from(!h.to_affine().is_identity()));
-
-    h
 }
