@@ -24,5 +24,5 @@ bitcoin_hashes = "0.14"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 [[bench]]
-name = "sign"
+name = "fafrost"
 harness = false

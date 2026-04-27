@@ -49,8 +49,11 @@ The repository includes [Criterion](https://github.com/bheisler/criterion.rs) be
 | `sign/full` | Full single-signer signing round |
 | `aggregate/full` | Share aggregation |
 | `blinding_scalar/blinding` | Pairwise blinding computation in isolation |
+| `ia1` | IA round 1: Pedersen commitments + well-formedness Sigma proof (per signer) |
+| `ia2` | IA round 2: local commitment comparison and pairwise-key opening decision (per signer) |
+| `decide` | Global identification: proof verification and key-opening checks across all signers |
 
-All `sign`, `aggregate`, and `blinding_scalar` benchmarks are parameterised over six signer-set configurations (min-signers/max-signers): **4/32**, **8/32**, **16/32**, **32/64**, **48/64**, **64/128**.
+All parameterised benchmarks run over six signer-set configurations (min-signers/max-signers): **4/32**, **8/32**, **16/32**, **32/64**, **48/64**, **64/128**.
 
 ```
 cargo bench
