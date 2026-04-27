@@ -60,15 +60,37 @@ pub fn encode_commitments(
     out
 }
 
-pub(crate) fn scalar_from_hash(parts: &[&[u8]]) -> Scalar {
-    let mut h = Sha256::new();
+/// Cloneable SHA-256 accumulator that finalises to a secp256k1 scalar.
+/// Clone at any point to branch off a cached prefix.
+#[derive(Clone)]
+pub(crate) struct ScalarHasher(Sha256);
 
+impl ScalarHasher {
+    pub(crate) fn new() -> Self {
+        Self(Sha256::new())
+    }
+
+    pub(crate) fn update(&mut self, data: &[u8]) {
+        self.0.update(data);
+    }
+
+    pub(crate) fn finish(self) -> Scalar {
+        let bytes: [u8; 32] = self.0.finalize().into();
+        <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(&bytes))
+    }
+
+    pub(crate) fn finish_with(mut self, data: &[u8]) -> Scalar {
+        self.0.update(data);
+        self.finish()
+    }
+}
+
+pub(crate) fn scalar_from_hash(parts: &[&[u8]]) -> Scalar {
+    let mut h = ScalarHasher::new();
     for p in parts {
         h.update(p);
     }
-
-    let bytes: [u8; 32] = h.finalize().into();
-    <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(&bytes))
+    h.finish()
 }
 
 pub(crate) fn point_bytes(point: &ProjectivePoint) -> [u8; 33] {

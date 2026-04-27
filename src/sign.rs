@@ -1,7 +1,7 @@
 #![allow(non_snake_case)]
 
 use crate::utils::{
-    delta, encode_commitments, encode_signer_set, lagrange, point_bytes, scalar_from_hash,
+    encode_commitments, encode_signer_set, lagrange, point_bytes, scalar_from_hash, ScalarHasher,
 };
 use std::collections::BTreeMap;
 use std::vec::Vec;
@@ -177,6 +177,15 @@ impl KeyPackage {
         commitments_bytes: &[u8],
         msg: &[u8; 32],
     ) -> Scalar {
+        let signer_set_bytes = encode_signer_set(ids);
+
+        // Hash the constant prefix once; k_ij is appended last per peer.
+        let mut base = ScalarHasher::new();
+        base.update(b"FaFROST/secp256k1/SHA256/Hs");
+        base.update(commitments_bytes);
+        base.update(msg);
+        base.update(&signer_set_bytes);
+
         let mut blind = Scalar::ZERO;
 
         for j in ids {
@@ -185,16 +194,13 @@ impl KeyPackage {
             }
 
             let k_ij = self.pairwise_keys.get(j).expect("missing pairwise key");
+            let B_ij = base.clone().finish_with(k_ij);
 
-            let B_ij = scalar_from_hash(&[
-                b"FaFROST/secp256k1/SHA256/Hs",
-                k_ij,
-                commitments_bytes,
-                msg,
-                &encode_signer_set(ids),
-            ]);
-
-            blind += B_ij * delta(self.identifier, *j);
+            if self.identifier > *j {
+                blind += B_ij;
+            } else {
+                blind -= B_ij;
+            }
         }
 
         blind

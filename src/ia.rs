@@ -11,7 +11,7 @@ use crate::keygen::{Identifier, KeyPackage, PublicKeyPackage};
 use crate::sign::{SignatureShare, SigningPackage};
 use crate::utils::{
     delta, encode_commitments, encode_signer_set, hash_pairwise_key_commitment, lagrange,
-    pedersen_commit, point_bytes, scalar_bytes, scalar_from_hash,
+    pedersen_commit, point_bytes, scalar_bytes, scalar_from_hash, ScalarHasher,
 };
 
 #[derive(Clone)]
@@ -63,6 +63,12 @@ pub fn ia1<R: RngCore + CryptoRng>(
     let signer_set_bytes = encode_signer_set(&ids);
     let view_bytes = ia_view_bytes(signing_package, all_signature_shares);
 
+    let mut b_base = ScalarHasher::new();
+    b_base.update(b"FaFROST/secp256k1/SHA256/Hs");
+    b_base.update(&commitments_bytes);
+    b_base.update(&signing_package.message);
+    b_base.update(&signer_set_bytes);
+
     let mut blinding_values = BTreeMap::new();
     let mut blinding_randomizers = BTreeMap::new();
     let mut blinding_commitments = BTreeMap::new();
@@ -77,13 +83,7 @@ pub fn ia1<R: RngCore + CryptoRng>(
             .get(j)
             .expect("missing pairwise key");
 
-        let B_ij = scalar_from_hash(&[
-            b"FaFROST/secp256k1/SHA256/Hs",
-            k_ij,
-            &commitments_bytes,
-            &signing_package.message,
-            &signer_set_bytes,
-        ]);
+        let B_ij = b_base.clone().finish_with(k_ij);
 
         let omega_ij = scalar_from_hash(&[b"FaFROST/secp256k1/SHA256/HIA", k_ij, &view_bytes]);
 
@@ -216,13 +216,14 @@ pub fn decide(
                 continue;
             }
 
-            let B = scalar_from_hash(&[
-                b"FaFROST/secp256k1/SHA256/Hs",
-                opened_key,
-                &commitments_bytes,
-                &signing_package.message,
-                &signer_set_bytes,
-            ]);
+            let B = {
+                let mut h = ScalarHasher::new();
+                h.update(b"FaFROST/secp256k1/SHA256/Hs");
+                h.update(&commitments_bytes);
+                h.update(&signing_package.message);
+                h.update(&signer_set_bytes);
+                h.finish_with(opened_key)
+            };
 
             let omega =
                 scalar_from_hash(&[b"FaFROST/secp256k1/SHA256/HIA", opened_key, &view_bytes]);
