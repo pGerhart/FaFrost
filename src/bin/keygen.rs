@@ -1,3 +1,4 @@
+use fafrost::Secp256k1Bip340;
 use fafrost::keygen::generate_with_dealer_and_write_key_yaml;
 use rand_core::OsRng;
 
@@ -18,21 +19,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "2".to_string())
         .parse::<u16>()?;
 
-    let (_shares, _pubkeys, stored_key) =
-        generate_with_dealer_and_write_key_yaml(&path, max_signers, min_signers, &mut rng)?;
+    let (_shares, pubkeys, stored_key) = generate_with_dealer_and_write_key_yaml::<
+        Secp256k1Bip340,
+        _,
+        _,
+    >(&path, max_signers, min_signers, &mut rng)?;
 
     println!("wrote key file: {}", path);
     println!("scheme: {}", stored_key.scheme);
     println!("threshold: {} of {}", min_signers, max_signers);
     println!("verifying key: {}", stored_key.verifying_key_hex);
-
-    #[cfg(feature = "bip340")]
-    {
-        println!(
-            "x-only pubkey: {}",
-            hex::encode(fafrost::bip340::x_only_bytes(&pubkeys.verifying_key))
-        );
-    }
+    println!(
+        "x-only pubkey: {}",
+        hex::encode(fafrost::bip340::x_only_bytes(&pubkeys.verifying_key))
+    );
 
     Ok(())
 }

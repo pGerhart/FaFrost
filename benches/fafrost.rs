@@ -3,36 +3,44 @@ use fafrost::ia::{IA1Message, IA2Decision, decide, ia1, ia2};
 use fafrost::keygen::generate_with_dealer;
 use fafrost::sign::{SignatureShare, SigningPackage, aggregate, commit, sign};
 use fafrost::utils::encode_commitments;
+use fafrost::{Ciphersuite, Ed25519, Secp256k1Bip340};
 use rand_core::OsRng;
 use std::collections::BTreeMap;
 
-const CONFIGS: &[(u16, u16)] = &[(4, 32), (8, 32), (16, 32), (32, 64), (48, 64), (64, 128)];
+const CONFIGS: &[(u16, u16)] = &[
+    (4, 256),
+    (8, 256),
+    (16, 256),
+    (32, 256),
+    (48, 256),
+    (64, 256),
+];
 
-struct Setup {
-    signing_package: SigningPackage,
-    key_package: fafrost::keygen::KeyPackage,
-    nonce: fafrost::sign::SigningNonces,
-    pubkeys: fafrost::keygen::PublicKeyPackage,
-    signature_shares: BTreeMap<Identifier, SignatureShare>,
+type Identifier = u16;
+
+struct Setup<C: Ciphersuite> {
+    signing_package: SigningPackage<C>,
+    key_package: fafrost::keygen::KeyPackage<C>,
+    nonce: fafrost::sign::SigningNonces<C>,
+    pubkeys: fafrost::keygen::PublicKeyPackage<C>,
+    signature_shares: BTreeMap<Identifier, SignatureShare<C>>,
     ids: Vec<u16>,
     commitments_bytes: Vec<u8>,
     message: [u8; 32],
 }
 
-struct IASetup {
-    signing_package: SigningPackage,
-    shares: BTreeMap<Identifier, fafrost::keygen::KeyPackage>,
-    pubkeys: fafrost::keygen::PublicKeyPackage,
-    signature_shares: BTreeMap<Identifier, SignatureShare>,
-    ia1_messages: BTreeMap<Identifier, IA1Message>,
+struct IASetup<C: Ciphersuite> {
+    signing_package: SigningPackage<C>,
+    shares: BTreeMap<Identifier, fafrost::keygen::KeyPackage<C>>,
+    pubkeys: fafrost::keygen::PublicKeyPackage<C>,
+    signature_shares: BTreeMap<Identifier, SignatureShare<C>>,
+    ia1_messages: BTreeMap<Identifier, IA1Message<C>>,
     ia2_decisions: BTreeMap<Identifier, IA2Decision>,
 }
 
-type Identifier = u16;
-
-fn make_setup(min_signers: u16, max_signers: u16) -> Setup {
+fn make_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> Setup<C> {
     let mut rng = OsRng;
-    let (shares, pubkeys) = generate_with_dealer(max_signers, min_signers, &mut rng);
+    let (shares, pubkeys) = generate_with_dealer::<C, _>(max_signers, min_signers, &mut rng);
 
     let signer_ids: Vec<Identifier> = (1..=min_signers).collect();
     let message = [42u8; 32];
@@ -40,12 +48,12 @@ fn make_setup(min_signers: u16, max_signers: u16) -> Setup {
     let mut commitments = BTreeMap::new();
     let mut nonces_map = BTreeMap::new();
     for &id in &signer_ids {
-        let (nonce, commitment) = commit(&mut rng);
+        let (nonce, commitment) = commit::<C, _>(&mut rng);
         nonces_map.insert(id, nonce);
         commitments.insert(id, commitment);
     }
 
-    let commitments_bytes = encode_commitments(&commitments);
+    let commitments_bytes = encode_commitments::<C>(&commitments);
 
     let signing_package = SigningPackage {
         message,
@@ -74,9 +82,9 @@ fn make_setup(min_signers: u16, max_signers: u16) -> Setup {
     }
 }
 
-fn make_ia_setup(min_signers: u16, max_signers: u16) -> IASetup {
+fn make_ia_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> IASetup<C> {
     let mut rng = OsRng;
-    let (shares, pubkeys) = generate_with_dealer(max_signers, min_signers, &mut rng);
+    let (shares, pubkeys) = generate_with_dealer::<C, _>(max_signers, min_signers, &mut rng);
 
     let signer_ids: Vec<Identifier> = (1..=min_signers).collect();
     let message = [42u8; 32];
@@ -84,7 +92,7 @@ fn make_ia_setup(min_signers: u16, max_signers: u16) -> IASetup {
     let mut nonces = BTreeMap::new();
     let mut commitments = BTreeMap::new();
     for &id in &signer_ids {
-        let (nonce, commitment) = commit(&mut rng);
+        let (nonce, commitment) = commit::<C, _>(&mut rng);
         nonces.insert(id, nonce);
         commitments.insert(id, commitment);
     }
@@ -130,18 +138,20 @@ fn make_ia_setup(min_signers: u16, max_signers: u16) -> IASetup {
     }
 }
 
-fn bench_commit(c: &mut Criterion) {
+fn bench_commit<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
     let mut rng = OsRng;
-    c.bench_function("commit", |b| b.iter(|| commit(&mut rng)));
+    c.bench_function(&format!("commit/{curve}"), |b| {
+        b.iter(|| commit::<C, _>(&mut rng))
+    });
 }
 
-fn bench_sign(c: &mut Criterion) {
+fn bench_sign<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
     let mut group = c.benchmark_group("sign");
 
     for &(min, max) in CONFIGS {
-        let s = make_setup(min, max);
+        let s = make_setup::<C>(min, max);
         group.bench_with_input(
-            BenchmarkId::new("full", format!("{min}/{max}")),
+            BenchmarkId::new(curve, format!("{min}/{max}")),
             &(),
             |b, _| b.iter(|| sign(&s.signing_package, &s.nonce, &s.key_package, &s.pubkeys)),
         );
@@ -150,13 +160,13 @@ fn bench_sign(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_aggregate(c: &mut Criterion) {
+fn bench_aggregate<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
     let mut group = c.benchmark_group("aggregate");
 
     for &(min, max) in CONFIGS {
-        let s = make_setup(min, max);
+        let s = make_setup::<C>(min, max);
         group.bench_with_input(
-            BenchmarkId::new("full", format!("{min}/{max}")),
+            BenchmarkId::new(curve, format!("{min}/{max}")),
             &(),
             |b, _| b.iter(|| aggregate(&s.signing_package, &s.signature_shares)),
         );
@@ -165,13 +175,13 @@ fn bench_aggregate(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_blinding(c: &mut Criterion) {
+fn bench_blinding<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
     let mut group = c.benchmark_group("blinding_scalar");
 
     for &(min, max) in CONFIGS {
-        let s = make_setup(min, max);
+        let s = make_setup::<C>(min, max);
         group.bench_with_input(
-            BenchmarkId::new("blinding", format!("{min}/{max}")),
+            BenchmarkId::new(curve, format!("{min}/{max}")),
             &(),
             |b, _| {
                 b.iter(|| {
@@ -185,15 +195,15 @@ fn bench_blinding(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_ia1(c: &mut Criterion) {
+fn bench_ia1<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
     let mut rng = OsRng;
     let mut group = c.benchmark_group("ia1");
 
     for &(min, max) in CONFIGS {
-        let s = make_ia_setup(min, max);
+        let s = make_ia_setup::<C>(min, max);
         let id = *s.shares.keys().next().unwrap();
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{min}/{max}")),
+            BenchmarkId::new(curve, format!("{min}/{max}")),
             &(),
             |b, _| {
                 b.iter(|| {
@@ -213,31 +223,29 @@ fn bench_ia1(c: &mut Criterion) {
     group.finish();
 }
 
-fn bench_ia2(c: &mut Criterion) {
+fn bench_ia2<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
     let mut group = c.benchmark_group("ia2");
 
     for &(min, max) in CONFIGS {
-        let s = make_ia_setup(min, max);
+        let s = make_ia_setup::<C>(min, max);
         let id = *s.shares.keys().next().unwrap();
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{min}/{max}")),
+            BenchmarkId::new(curve, format!("{min}/{max}")),
             &(),
-            |b, _| {
-                b.iter(|| ia2(&s.shares[&id], &s.signing_package, &s.ia1_messages))
-            },
+            |b, _| b.iter(|| ia2(&s.shares[&id], &s.signing_package, &s.ia1_messages)),
         );
     }
 
     group.finish();
 }
 
-fn bench_decide(c: &mut Criterion) {
+fn bench_decide<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
     let mut group = c.benchmark_group("decide");
 
     for &(min, max) in CONFIGS {
-        let s = make_ia_setup(min, max);
+        let s = make_ia_setup::<C>(min, max);
         group.bench_with_input(
-            BenchmarkId::from_parameter(format!("{min}/{max}")),
+            BenchmarkId::new(curve, format!("{min}/{max}")),
             &(),
             |b, _| {
                 b.iter(|| {
@@ -256,14 +264,20 @@ fn bench_decide(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    bench_commit,
-    bench_sign,
-    bench_aggregate,
-    bench_blinding,
-    bench_ia1,
-    bench_ia2,
-    bench_decide,
-);
+fn benches_for<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
+    bench_commit::<C>(c, curve);
+    bench_sign::<C>(c, curve);
+    bench_aggregate::<C>(c, curve);
+    bench_blinding::<C>(c, curve);
+    bench_ia1::<C>(c, curve);
+    bench_ia2::<C>(c, curve);
+    bench_decide::<C>(c, curve);
+}
+
+fn all_curves(c: &mut Criterion) {
+    benches_for::<Secp256k1Bip340>(c, "secp256k1");
+    benches_for::<Ed25519>(c, "ed25519");
+}
+
+criterion_group!(benches, all_curves);
 criterion_main!(benches);

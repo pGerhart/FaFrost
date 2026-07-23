@@ -10,6 +10,7 @@ use bitcoin::{
 };
 use bitcoin_hashes::Hash;
 use fafrost::{
+    Secp256k1Bip340,
     bip340::{
         bip340_challenge_scalar, bip340_verify_bytes, has_odd_y, signature_to_bytes, x_only_bytes,
     },
@@ -39,7 +40,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let network = Network::Testnet;
     let mut rng = OsRng;
 
-    let (shares, pubkeys) = generate_with_dealer_from_key_yaml(&key_file, &mut rng)?;
+    let (shares, pubkeys) =
+        generate_with_dealer_from_key_yaml::<Secp256k1Bip340, _, _>(&key_file, &mut rng)?;
 
     let internal_xonly = x_only_bytes(&pubkeys.verifying_key);
     let internal = XOnlyPublicKey::from_slice(&internal_xonly)?;
@@ -118,7 +120,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut commitments = BTreeMap::new();
 
     for id in signer_ids {
-        let (nonce, commitment) = commit(&mut rng);
+        let (nonce, commitment) = commit::<Secp256k1Bip340, _>(&mut rng);
         nonces.insert(id, nonce);
         commitments.insert(id, commitment);
     }

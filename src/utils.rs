@@ -1,39 +1,35 @@
 use std::collections::BTreeMap;
 use std::vec::Vec;
 
-use k256::{
-    FieldBytes, ProjectivePoint, Scalar, Secp256k1, U256,
-    elliptic_curve::{
-        PrimeField,
-        group::prime::PrimeCurveAffine,
-        hash2curve::{ExpandMsgXmd, GroupDigest},
-        ops::Reduce,
-        sec1::ToEncodedPoint,
-    },
-};
-use sha2::{Digest, Sha256};
+use ff::{Field, PrimeField};
+use group::Group;
 
+use crate::ciphersuite::Ciphersuite;
 use crate::keygen::Identifier;
 use crate::sign::SigningCommitments;
 
-pub(crate) fn lagrange(i: Identifier, signer_set: &[Identifier]) -> Scalar {
-    let i_s = Scalar::from(i as u64);
-    let mut out = Scalar::ONE;
+pub(crate) fn lagrange<C: Ciphersuite>(i: Identifier, signer_set: &[Identifier]) -> C::Scalar {
+    let i_s = C::Scalar::from(i as u64);
+    let mut out = C::Scalar::ONE;
 
     for j in signer_set {
         if *j == i {
             continue;
         }
 
-        let j_s = Scalar::from(*j as u64);
+        let j_s = C::Scalar::from(*j as u64);
         out *= j_s * (j_s - i_s).invert().unwrap();
     }
 
     out
 }
 
-pub(crate) fn delta(i: Identifier, j: Identifier) -> Scalar {
-    if i > j { Scalar::ONE } else { -Scalar::ONE }
+pub(crate) fn delta<C: Ciphersuite>(i: Identifier, j: Identifier) -> C::Scalar {
+    if i > j {
+        C::Scalar::ONE
+    } else {
+        -C::Scalar::ONE
+    }
 }
 
 pub(crate) fn encode_signer_set(ids: &[Identifier]) -> Vec<u8> {
@@ -46,106 +42,59 @@ pub(crate) fn encode_signer_set(ids: &[Identifier]) -> Vec<u8> {
     out
 }
 
-pub fn encode_commitments(
-    commitments: &BTreeMap<Identifier, SigningCommitments>,
+pub fn encode_commitments<C: Ciphersuite>(
+    commitments: &BTreeMap<Identifier, SigningCommitments<C>>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
 
     for (id, c) in commitments {
         out.extend_from_slice(&id.to_be_bytes());
-        out.extend_from_slice(&point_bytes(&c.D));
-        out.extend_from_slice(&point_bytes(&c.E));
+        out.extend_from_slice(&C::point_bytes(&c.D));
+        out.extend_from_slice(&C::point_bytes(&c.E));
     }
 
     out
 }
 
-/// Cloneable SHA-256 accumulator that finalises to a secp256k1 scalar.
-/// Clone at any point to branch off a cached prefix.
-#[derive(Clone)]
-pub(crate) struct ScalarHasher(Sha256);
-
-impl ScalarHasher {
-    pub(crate) fn new() -> Self {
-        Self(Sha256::new())
-    }
-
-    pub(crate) fn update(&mut self, data: &[u8]) {
-        self.0.update(data);
-    }
-
-    pub(crate) fn finish(self) -> Scalar {
-        let bytes: [u8; 32] = self.0.finalize().into();
-        <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(&bytes))
-    }
-
-    pub(crate) fn finish_with(mut self, data: &[u8]) -> Scalar {
-        self.0.update(data);
-        self.finish()
-    }
+pub fn pedersen_commit<C: Ciphersuite>(
+    value: C::Scalar,
+    blinding: C::Scalar,
+    h: C::Point,
+) -> C::Point {
+    C::Point::generator() * value + h * blinding
 }
 
-pub(crate) fn scalar_from_hash(parts: &[&[u8]]) -> Scalar {
-    let mut h = ScalarHasher::new();
-    for p in parts {
-        h.update(p);
-    }
-    h.finish()
-}
-
-pub(crate) fn point_bytes(point: &ProjectivePoint) -> [u8; 33] {
-    let enc = point.to_affine().to_encoded_point(true);
-    let mut out = [0u8; 33];
-    out.copy_from_slice(enc.as_bytes());
-    out
-}
-
-pub fn pedersen_commit(value: Scalar, blinding: Scalar, h: ProjectivePoint) -> ProjectivePoint {
-    ProjectivePoint::GENERATOR * value + h * blinding
-}
-
-pub fn hash_pairwise_key_commitment(k_ij: &[u8; 32]) -> [u8; 32] {
+/// Domain-separated `SHA-256` commitment to a 32-byte pairwise key. This is a
+/// scheme-internal binding commitment (independent of the signature challenge),
+/// so it uses `SHA-256` for every ciphersuite, keyed by the suite context.
+pub fn hash_pairwise_key_commitment<C: Ciphersuite>(k_ij: &[u8; 32]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
     let mut h = Sha256::new();
-    h.update(b"FaFROST/secp256k1/SHA256/Hvk");
+    h.update(C::CONTEXT.as_bytes());
+    h.update(b"/Hvk");
     h.update(k_ij);
     h.finalize().into()
 }
 
-pub fn scalar_bytes(scalar: &Scalar) -> [u8; 32] {
-    scalar.to_repr().into()
+pub fn scalar_bytes<C: Ciphersuite>(scalar: &C::Scalar) -> Vec<u8> {
+    scalar.to_repr().as_ref().to_vec()
 }
 
-pub fn scalar_to_hex(scalar: &Scalar) -> String {
-    let bytes: [u8; 32] = scalar.to_repr().into();
-    hex::encode(bytes)
+pub fn scalar_to_hex<C: Ciphersuite>(scalar: &C::Scalar) -> String {
+    hex::encode(scalar.to_repr().as_ref())
 }
 
-pub fn scalar_from_hex(hex_string: &str) -> Result<Scalar, Box<dyn std::error::Error>> {
+pub fn scalar_from_hex<C: Ciphersuite>(
+    hex_string: &str,
+) -> Result<C::Scalar, Box<dyn std::error::Error>> {
     let bytes_vec = hex::decode(hex_string)?;
-    if bytes_vec.len() != 32 {
-        return Err("scalar hex must decode to exactly 32 bytes".into());
+
+    let mut repr = <C::Scalar as PrimeField>::Repr::default();
+    if bytes_vec.len() != repr.as_ref().len() {
+        return Err("scalar hex has wrong length for this ciphersuite".into());
     }
+    repr.as_mut().copy_from_slice(&bytes_vec);
 
-    let mut bytes = [0u8; 32];
-    bytes.copy_from_slice(&bytes_vec);
-
-    let maybe_scalar = Scalar::from_repr(FieldBytes::from(bytes));
-    Option::<Scalar>::from(maybe_scalar)
-        .ok_or_else(|| "scalar is not canonical modulo secp256k1 order".into())
-}
-
-pub fn scalar_from_bytes_mod_order(bytes: &[u8; 32]) -> Scalar {
-    <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(bytes))
-}
-
-pub fn pedersen_generator() -> ProjectivePoint {
-    let h = Secp256k1::hash_from_bytes::<ExpandMsgXmd<Sha256>>(
-        &[b"FaFROST/secp256k1/SHA256/PedersenH"],
-        &[b"FaFROST/secp256k1/SHA256"],
-    )
-    .expect("hash to curve failed");
-
-    assert!(bool::from(!h.to_affine().is_identity()));
-
-    h
+    Option::<C::Scalar>::from(C::Scalar::from_repr(repr))
+        .ok_or_else(|| "scalar is not canonical modulo the group order".into())
 }

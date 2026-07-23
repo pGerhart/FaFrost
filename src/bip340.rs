@@ -12,6 +12,7 @@ use k256::{AffinePoint, FieldBytes, ProjectivePoint, Scalar, Secp256k1, U256};
 use sha2::{Digest, Sha256};
 
 use crate::keygen::PublicKeyPackage;
+use crate::secp256k1::Secp256k1Bip340;
 use crate::sign::Signature;
 
 pub fn has_odd_y(point: &ProjectivePoint) -> bool {
@@ -54,13 +55,13 @@ fn lift_x(x_bytes: &[u8; 32]) -> Option<ProjectivePoint> {
 }
 
 /// 32-byte x-only public key for use in a `OP_1 <32-byte-key>` (P2TR) output.
-pub fn xonly_pubkey(pubkeys: &PublicKeyPackage) -> [u8; 32] {
+pub fn xonly_pubkey(pubkeys: &PublicKeyPackage<Secp256k1Bip340>) -> [u8; 32] {
     x_only_bytes(&pubkeys.verifying_key)
 }
 
 /// Serialise an aggregate `Signature` to the 64-byte wire format expected by
 /// Bitcoin: `bytes(R_x) || bytes(s)`.
-pub fn signature_to_bytes(sig: &Signature) -> [u8; 64] {
+pub fn signature_to_bytes(sig: &Signature<Secp256k1Bip340>) -> [u8; 64] {
     assert!(!has_odd_y(&sig.R), "BIP340 signature R must have even y");
 
     let r_x = x_only_bytes(&sig.R);

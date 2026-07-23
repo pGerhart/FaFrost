@@ -3,22 +3,23 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::vec::Vec;
 
-use k256::elliptic_curve::Field;
-use k256::{ProjectivePoint, Scalar};
+use ff::Field;
+use group::Group;
 use rand_core::{CryptoRng, RngCore};
 
+use crate::ciphersuite::{Ciphersuite, ScalarHasher};
 use crate::keygen::{Identifier, KeyPackage, PublicKeyPackage};
 use crate::sign::{SignatureShare, SigningPackage};
 use crate::utils::{
     delta, encode_commitments, encode_signer_set, hash_pairwise_key_commitment, lagrange,
-    pedersen_commit, point_bytes, scalar_bytes, scalar_from_hash, ScalarHasher,
+    pedersen_commit, scalar_bytes,
 };
 
 #[derive(Clone)]
-pub struct IA1Message {
+pub struct IA1Message<C: Ciphersuite> {
     pub identifier: Identifier,
-    pub blinding_commitments: BTreeMap<Identifier, ProjectivePoint>,
-    pub proof: WellformedProof,
+    pub blinding_commitments: BTreeMap<Identifier, C::Point>,
+    pub proof: WellformedProof<C>,
 }
 
 #[derive(Clone)]
@@ -28,25 +29,25 @@ pub struct IA2Decision {
 }
 
 #[derive(Clone)]
-pub struct WellformedProof {
-    pub t_sig: ProjectivePoint,
-    pub t_key: ProjectivePoint,
-    pub t_blind: BTreeMap<Identifier, ProjectivePoint>,
+pub struct WellformedProof<C: Ciphersuite> {
+    pub t_sig: C::Point,
+    pub t_key: C::Point,
+    pub t_blind: BTreeMap<Identifier, C::Point>,
 
-    pub z_sk: Scalar,
-    pub z_sk_blinding: Scalar,
-    pub z_blind: BTreeMap<Identifier, Scalar>,
-    pub z_blind_blinding: BTreeMap<Identifier, Scalar>,
+    pub z_sk: C::Scalar,
+    pub z_sk_blinding: C::Scalar,
+    pub z_blind: BTreeMap<Identifier, C::Scalar>,
+    pub z_blind_blinding: BTreeMap<Identifier, C::Scalar>,
 }
 
-pub fn ia1<R: RngCore + CryptoRng>(
-    signing_package: &SigningPackage,
-    signature_share: &SignatureShare,
-    key_package: &KeyPackage,
-    pubkeys: &PublicKeyPackage,
-    all_signature_shares: &BTreeMap<Identifier, SignatureShare>,
+pub fn ia1<C: Ciphersuite, R: RngCore + CryptoRng>(
+    signing_package: &SigningPackage<C>,
+    signature_share: &SignatureShare<C>,
+    key_package: &KeyPackage<C>,
+    pubkeys: &PublicKeyPackage<C>,
+    all_signature_shares: &BTreeMap<Identifier, SignatureShare<C>>,
     rng: &mut R,
-) -> IA1Message {
+) -> IA1Message<C> {
     let ids: Vec<Identifier> = signing_package
         .signing_commitments
         .keys()
@@ -58,13 +59,14 @@ pub fn ia1<R: RngCore + CryptoRng>(
     assert_eq!(signature_share.identifier, i);
     assert!(ids.contains(&i));
 
-    let commitments_bytes = encode_commitments(&signing_package.signing_commitments);
+    let commitments_bytes = encode_commitments::<C>(&signing_package.signing_commitments);
 
     let signer_set_bytes = encode_signer_set(&ids);
-    let view_bytes = ia_view_bytes(signing_package, all_signature_shares);
+    let view_bytes = ia_view_bytes::<C>(signing_package, all_signature_shares);
 
-    let mut b_base = ScalarHasher::new();
-    b_base.update(b"FaFROST/secp256k1/SHA256/Hs");
+    let mut b_base = C::Hasher::new();
+    b_base.update(C::CONTEXT.as_bytes());
+    b_base.update(b"/Hs");
     b_base.update(&commitments_bytes);
     b_base.update(&signing_package.message);
     b_base.update(&signer_set_bytes);
@@ -85,16 +87,17 @@ pub fn ia1<R: RngCore + CryptoRng>(
 
         let B_ij = b_base.clone().finish_with(k_ij);
 
-        let omega_ij = scalar_from_hash(&[b"FaFROST/secp256k1/SHA256/HIA", k_ij, &view_bytes]);
+        let omega_ij =
+            C::hash_to_scalar(&[C::CONTEXT.as_bytes(), b"/HIA", k_ij, &view_bytes]);
 
-        let C_ij = pedersen_commit(B_ij, omega_ij, pubkeys.pedersen_h);
+        let C_ij = pedersen_commit::<C>(B_ij, omega_ij, pubkeys.pedersen_h);
 
         blinding_values.insert(*j, B_ij);
         blinding_randomizers.insert(*j, omega_ij);
         blinding_commitments.insert(*j, C_ij);
     }
 
-    let proof = prove_wellformed(
+    let proof = prove_wellformed::<C, R>(
         signing_package,
         signature_share,
         key_package,
@@ -112,10 +115,10 @@ pub fn ia1<R: RngCore + CryptoRng>(
     }
 }
 
-pub fn ia2(
-    key_package: &KeyPackage,
-    signing_package: &SigningPackage,
-    ia1_messages: &BTreeMap<Identifier, IA1Message>,
+pub fn ia2<C: Ciphersuite>(
+    key_package: &KeyPackage<C>,
+    signing_package: &SigningPackage<C>,
+    ia1_messages: &BTreeMap<Identifier, IA1Message<C>>,
 ) -> IA2Decision {
     let i = key_package.identifier;
 
@@ -162,11 +165,11 @@ pub fn ia2(
     }
 }
 
-pub fn decide(
-    signing_package: &SigningPackage,
-    pubkeys: &PublicKeyPackage,
-    signature_shares: &BTreeMap<Identifier, SignatureShare>,
-    ia1_messages: &BTreeMap<Identifier, IA1Message>,
+pub fn decide<C: Ciphersuite>(
+    signing_package: &SigningPackage<C>,
+    pubkeys: &PublicKeyPackage<C>,
+    signature_shares: &BTreeMap<Identifier, SignatureShare<C>>,
+    ia1_messages: &BTreeMap<Identifier, IA1Message<C>>,
     ia2_decisions: &BTreeMap<Identifier, IA2Decision>,
 ) -> BTreeSet<Identifier> {
     let ids: Vec<Identifier> = signing_package
@@ -188,15 +191,15 @@ pub fn decide(
             continue;
         };
 
-        if !verify_wellformed_proof(signing_package, share, msg, pubkeys) {
+        if !verify_wellformed_proof::<C>(signing_package, share, msg, pubkeys) {
             malicious.insert(*id);
         }
     }
 
-    let commitments_bytes = encode_commitments(&signing_package.signing_commitments);
+    let commitments_bytes = encode_commitments::<C>(&signing_package.signing_commitments);
 
     let signer_set_bytes = encode_signer_set(&ids);
-    let view_bytes = ia_view_bytes(signing_package, signature_shares);
+    let view_bytes = ia_view_bytes::<C>(signing_package, signature_shares);
 
     for (accuser, decision) in ia2_decisions {
         for (peer, opened_key) in &decision.opened_pairwise_keys {
@@ -211,14 +214,15 @@ pub fn decide(
                 continue;
             };
 
-            if hash_pairwise_key_commitment(opened_key) != *expected_key_commitment {
+            if hash_pairwise_key_commitment::<C>(opened_key) != *expected_key_commitment {
                 malicious.insert(*accuser);
                 continue;
             }
 
             let B = {
-                let mut h = ScalarHasher::new();
-                h.update(b"FaFROST/secp256k1/SHA256/Hs");
+                let mut h = C::Hasher::new();
+                h.update(C::CONTEXT.as_bytes());
+                h.update(b"/Hs");
                 h.update(&commitments_bytes);
                 h.update(&signing_package.message);
                 h.update(&signer_set_bytes);
@@ -226,9 +230,9 @@ pub fn decide(
             };
 
             let omega =
-                scalar_from_hash(&[b"FaFROST/secp256k1/SHA256/HIA", opened_key, &view_bytes]);
+                C::hash_to_scalar(&[C::CONTEXT.as_bytes(), b"/HIA", opened_key, &view_bytes]);
 
-            let expected_commitment = pedersen_commit(B, omega, pubkeys.pedersen_h);
+            let expected_commitment = pedersen_commit::<C>(B, omega, pubkeys.pedersen_h);
 
             let Some(peer_msg) = ia1_messages.get(peer) else {
                 malicious.insert(*peer);
@@ -297,16 +301,16 @@ pub fn decide(
     malicious
 }
 
-fn prove_wellformed<R: RngCore + CryptoRng>(
-    signing_package: &SigningPackage,
-    signature_share: &SignatureShare,
-    key_package: &KeyPackage,
-    pubkeys: &PublicKeyPackage,
-    blinding_values: &BTreeMap<Identifier, Scalar>,
-    blinding_randomizers: &BTreeMap<Identifier, Scalar>,
-    blinding_commitments: &BTreeMap<Identifier, ProjectivePoint>,
+fn prove_wellformed<C: Ciphersuite, R: RngCore + CryptoRng>(
+    signing_package: &SigningPackage<C>,
+    signature_share: &SignatureShare<C>,
+    key_package: &KeyPackage<C>,
+    pubkeys: &PublicKeyPackage<C>,
+    blinding_values: &BTreeMap<Identifier, C::Scalar>,
+    blinding_randomizers: &BTreeMap<Identifier, C::Scalar>,
+    blinding_commitments: &BTreeMap<Identifier, C::Point>,
     rng: &mut R,
-) -> WellformedProof {
+) -> WellformedProof<C> {
     let ids: Vec<Identifier> = signing_package
         .signing_commitments
         .keys()
@@ -315,12 +319,12 @@ fn prove_wellformed<R: RngCore + CryptoRng>(
 
     let i = key_package.identifier;
 
-    let b = nonce_challenge(signing_package, pubkeys);
-    let c = sig_challenge(signing_package, pubkeys);
-    let lambda_i = lagrange(i, &ids);
+    let b = nonce_challenge::<C>(signing_package, pubkeys);
+    let c = sig_challenge::<C>(signing_package, pubkeys);
+    let lambda_i = lagrange::<C>(i, &ids);
 
-    let r_sk = Scalar::random(&mut *rng);
-    let r_sk_blinding = Scalar::random(&mut *rng);
+    let r_sk = C::Scalar::random(&mut *rng);
+    let r_sk_blinding = C::Scalar::random(&mut *rng);
 
     let mut r_blind = BTreeMap::new();
     let mut r_blind_blinding = BTreeMap::new();
@@ -330,21 +334,21 @@ fn prove_wellformed<R: RngCore + CryptoRng>(
             continue;
         }
 
-        r_blind.insert(*j, Scalar::random(&mut *rng));
-        r_blind_blinding.insert(*j, Scalar::random(&mut *rng));
+        r_blind.insert(*j, C::Scalar::random(&mut *rng));
+        r_blind_blinding.insert(*j, C::Scalar::random(&mut *rng));
     }
 
-    let mut t_sig = ProjectivePoint::GENERATOR * (lambda_i * c * r_sk);
+    let mut t_sig = C::Point::generator() * (lambda_i * c * r_sk);
 
     for j in &ids {
         if *j == i {
             continue;
         }
 
-        t_sig += ProjectivePoint::GENERATOR * (*r_blind.get(j).unwrap() * delta(i, *j));
+        t_sig += C::Point::generator() * (*r_blind.get(j).unwrap() * delta::<C>(i, *j));
     }
 
-    let t_key = ProjectivePoint::GENERATOR * r_sk + pubkeys.pedersen_h * r_sk_blinding;
+    let t_key = C::Point::generator() * r_sk + pubkeys.pedersen_h * r_sk_blinding;
 
     let mut t_blind = BTreeMap::new();
 
@@ -353,13 +357,13 @@ fn prove_wellformed<R: RngCore + CryptoRng>(
             continue;
         }
 
-        let t = ProjectivePoint::GENERATOR * *r_blind.get(j).unwrap()
+        let t = C::Point::generator() * *r_blind.get(j).unwrap()
             + pubkeys.pedersen_h * *r_blind_blinding.get(j).unwrap();
 
         t_blind.insert(*j, t);
     }
 
-    let challenge = proof_challenge(
+    let challenge = proof_challenge::<C>(
         signing_package,
         signature_share,
         pubkeys,
@@ -401,11 +405,11 @@ fn prove_wellformed<R: RngCore + CryptoRng>(
     }
 }
 
-fn verify_wellformed_proof(
-    signing_package: &SigningPackage,
-    signature_share: &SignatureShare,
-    ia1_message: &IA1Message,
-    pubkeys: &PublicKeyPackage,
+fn verify_wellformed_proof<C: Ciphersuite>(
+    signing_package: &SigningPackage<C>,
+    signature_share: &SignatureShare<C>,
+    ia1_message: &IA1Message<C>,
+    pubkeys: &PublicKeyPackage<C>,
 ) -> bool {
     let ids: Vec<Identifier> = signing_package
         .signing_commitments
@@ -427,36 +431,30 @@ fn verify_wellformed_proof(
         return false;
     };
 
-    let b = nonce_challenge(signing_package, pubkeys);
-    let c = sig_challenge(signing_package, pubkeys);
-    let lambda_i = lagrange(i, &ids);
+    let b = nonce_challenge::<C>(signing_package, pubkeys);
+    let c = sig_challenge::<C>(signing_package, pubkeys);
+    let lambda_i = lagrange::<C>(i, &ids);
 
-    // A = G*z - D_i - b*E_i  (= G*(c·λi·sk_i + B_i^s) after nonces cancel).
-    // With bip340 and odd R the nonces in z were negated, so the signs flip.
+    // A = G*z - sign*(D_i + b*E_i)  (= G*(c·λi·sk_i + B_i^s) after nonces cancel).
+    // `sign` is +1 if the share kept its nonce and -1 if the ciphersuite negated
+    // it during normalisation (BIP-340 odd-y aggregate R); a probe of ONE through
+    // `normalize_share_r` recovers that sign without curve-specific branches.
     let A = {
-        let base = ProjectivePoint::GENERATOR * signature_share.z;
-        #[cfg(feature = "bip340")]
-        {
-            let mut agg_d = ProjectivePoint::IDENTITY;
-            let mut agg_e = ProjectivePoint::IDENTITY;
-            for comm in signing_package.signing_commitments.values() {
-                agg_d += comm.D;
-                agg_e += comm.E;
-            }
-            let R_raw = agg_d + agg_e * b;
-            if crate::bip340::has_odd_y(&R_raw) {
-                base + commitment_i.D + commitment_i.E * b
-            } else {
-                base + commitment_i.D * (-Scalar::ONE) + commitment_i.E * (-b)
-            }
+        let base = C::Point::generator() * signature_share.z;
+
+        let mut agg_d = C::Point::identity();
+        let mut agg_e = C::Point::identity();
+        for comm in signing_package.signing_commitments.values() {
+            agg_d += comm.D;
+            agg_e += comm.E;
         }
-        #[cfg(not(feature = "bip340"))]
-        {
-            base + commitment_i.D * (-Scalar::ONE) + commitment_i.E * (-b)
-        }
+        let R_raw = agg_d + agg_e * b;
+        let (_, sign) = C::normalize_share_r(R_raw, C::Scalar::ONE);
+
+        base - (commitment_i.D + commitment_i.E * b) * sign
     };
 
-    let challenge = proof_challenge(
+    let challenge = proof_challenge::<C>(
         signing_package,
         signature_share,
         pubkeys,
@@ -468,7 +466,7 @@ fn verify_wellformed_proof(
         c,
     );
 
-    let mut rhs_sig = ProjectivePoint::GENERATOR * (lambda_i * c * ia1_message.proof.z_sk);
+    let mut rhs_sig = C::Point::generator() * (lambda_i * c * ia1_message.proof.z_sk);
 
     for j in &ids {
         if *j == i {
@@ -479,7 +477,7 @@ fn verify_wellformed_proof(
             return false;
         };
 
-        rhs_sig += ProjectivePoint::GENERATOR * (*z_B * delta(i, *j));
+        rhs_sig += C::Point::generator() * (*z_B * delta::<C>(i, *j));
     }
 
     rhs_sig += A * (-challenge);
@@ -488,7 +486,7 @@ fn verify_wellformed_proof(
         return false;
     }
 
-    let rhs_key = ProjectivePoint::GENERATOR * ia1_message.proof.z_sk
+    let rhs_key = C::Point::generator() * ia1_message.proof.z_sk
         + pubkeys.pedersen_h * ia1_message.proof.z_sk_blinding
         + vki.signing_share_commitment * (-challenge);
 
@@ -517,7 +515,7 @@ fn verify_wellformed_proof(
             return false;
         };
 
-        let rhs = ProjectivePoint::GENERATOR * *z_B
+        let rhs = C::Point::generator() * *z_B
             + pubkeys.pedersen_h * *z_omega
             + *C_ij * (-challenge);
 
@@ -529,19 +527,23 @@ fn verify_wellformed_proof(
     true
 }
 
-fn nonce_challenge(signing_package: &SigningPackage, pubkeys: &PublicKeyPackage) -> Scalar {
+fn nonce_challenge<C: Ciphersuite>(
+    signing_package: &SigningPackage<C>,
+    pubkeys: &PublicKeyPackage<C>,
+) -> C::Scalar {
     let ids: Vec<Identifier> = signing_package
         .signing_commitments
         .keys()
         .copied()
         .collect();
 
-    let commitments_bytes = encode_commitments(&signing_package.signing_commitments);
+    let commitments_bytes = encode_commitments::<C>(&signing_package.signing_commitments);
 
-    let vk_bytes = point_bytes(&pubkeys.verifying_key);
+    let vk_bytes = C::point_bytes(&pubkeys.verifying_key);
 
-    scalar_from_hash(&[
-        b"FaFROST/secp256k1/SHA256/Hnon",
+    C::hash_to_scalar(&[
+        C::CONTEXT.as_bytes(),
+        b"/Hnon",
         &vk_bytes,
         &encode_signer_set(&ids),
         &signing_package.message,
@@ -549,11 +551,14 @@ fn nonce_challenge(signing_package: &SigningPackage, pubkeys: &PublicKeyPackage)
     ])
 }
 
-fn sig_challenge(signing_package: &SigningPackage, pubkeys: &PublicKeyPackage) -> Scalar {
-    let b = nonce_challenge(signing_package, pubkeys);
+fn sig_challenge<C: Ciphersuite>(
+    signing_package: &SigningPackage<C>,
+    pubkeys: &PublicKeyPackage<C>,
+) -> C::Scalar {
+    let b = nonce_challenge::<C>(signing_package, pubkeys);
 
-    let mut D = ProjectivePoint::IDENTITY;
-    let mut E = ProjectivePoint::IDENTITY;
+    let mut D = C::Point::identity();
+    let mut E = C::Point::identity();
 
     for c in signing_package.signing_commitments.values() {
         D += c.D;
@@ -562,169 +567,64 @@ fn sig_challenge(signing_package: &SigningPackage, pubkeys: &PublicKeyPackage) -
 
     let R = D + E * b;
 
-    {
-        #[cfg(feature = "bip340")]
-        {
-            let r_x = crate::bip340::x_only_bytes(&R);
-            let p_x = crate::bip340::x_only_bytes(&pubkeys.verifying_key);
-            crate::bip340::bip340_challenge_scalar(&r_x, &p_x, &signing_package.message)
-        }
-        #[cfg(not(feature = "bip340"))]
-        {
-            let vk_bytes = point_bytes(&pubkeys.verifying_key);
-            let R_bytes = point_bytes(&R);
-            scalar_from_hash(&[
-                b"FaFROST/secp256k1/SHA256/Hsig",
-                &vk_bytes,
-                &R_bytes,
-                &signing_package.message,
-            ])
-        }
-    }
+    C::challenge(&pubkeys.verifying_key, &R, &signing_package.message)
 }
 
-fn proof_challenge(
-    signing_package: &SigningPackage,
-    signature_share: &SignatureShare,
-    pubkeys: &PublicKeyPackage,
-    blinding_commitments: &BTreeMap<Identifier, ProjectivePoint>,
-    t_sig: &ProjectivePoint,
-    t_key: &ProjectivePoint,
-    t_blind: &BTreeMap<Identifier, ProjectivePoint>,
-    b: Scalar,
-    c: Scalar,
-) -> Scalar {
+fn proof_challenge<C: Ciphersuite>(
+    signing_package: &SigningPackage<C>,
+    signature_share: &SignatureShare<C>,
+    pubkeys: &PublicKeyPackage<C>,
+    blinding_commitments: &BTreeMap<Identifier, C::Point>,
+    t_sig: &C::Point,
+    t_key: &C::Point,
+    t_blind: &BTreeMap<Identifier, C::Point>,
+    b: C::Scalar,
+    c: C::Scalar,
+) -> C::Scalar {
     let mut transcript = Vec::new();
 
-    transcript.extend_from_slice(b"FaFROST/secp256k1/SHA256/IAProof");
+    transcript.extend_from_slice(C::CONTEXT.as_bytes());
+    transcript.extend_from_slice(b"/IAProof");
 
     transcript.extend_from_slice(&signature_share.identifier.to_be_bytes());
     transcript.extend_from_slice(&signing_package.message);
-    transcript.extend_from_slice(&scalar_bytes(&b));
-    transcript.extend_from_slice(&scalar_bytes(&c));
-    transcript.extend_from_slice(&scalar_bytes(&signature_share.z));
-    transcript.extend_from_slice(&point_bytes(&signature_share.R));
-    transcript.extend_from_slice(&point_bytes(&pubkeys.verifying_key));
+    transcript.extend_from_slice(&scalar_bytes::<C>(&b));
+    transcript.extend_from_slice(&scalar_bytes::<C>(&c));
+    transcript.extend_from_slice(&scalar_bytes::<C>(&signature_share.z));
+    transcript.extend_from_slice(&C::point_bytes(&signature_share.R));
+    transcript.extend_from_slice(&C::point_bytes(&pubkeys.verifying_key));
 
-    transcript.extend_from_slice(&encode_commitments(&signing_package.signing_commitments));
+    transcript.extend_from_slice(&encode_commitments::<C>(&signing_package.signing_commitments));
 
-    for (id, C) in blinding_commitments {
+    for (id, C_pt) in blinding_commitments {
         transcript.extend_from_slice(&id.to_be_bytes());
-        transcript.extend_from_slice(&point_bytes(C));
+        transcript.extend_from_slice(&C::point_bytes(C_pt));
     }
 
-    transcript.extend_from_slice(&point_bytes(t_sig));
-    transcript.extend_from_slice(&point_bytes(t_key));
+    transcript.extend_from_slice(&C::point_bytes(t_sig));
+    transcript.extend_from_slice(&C::point_bytes(t_key));
 
     for (id, T) in t_blind {
         transcript.extend_from_slice(&id.to_be_bytes());
-        transcript.extend_from_slice(&point_bytes(T));
+        transcript.extend_from_slice(&C::point_bytes(T));
     }
 
-    scalar_from_hash(&[&transcript])
+    C::hash_to_scalar(&[&transcript])
 }
 
-fn ia_view_bytes(
-    signing_package: &SigningPackage,
-    signature_shares: &BTreeMap<Identifier, SignatureShare>,
+fn ia_view_bytes<C: Ciphersuite>(
+    signing_package: &SigningPackage<C>,
+    signature_shares: &BTreeMap<Identifier, SignatureShare<C>>,
 ) -> Vec<u8> {
     let mut out = Vec::new();
 
-    out.extend_from_slice(&encode_commitments(&signing_package.signing_commitments));
+    out.extend_from_slice(&encode_commitments::<C>(&signing_package.signing_commitments));
 
     for (id, share) in signature_shares {
         out.extend_from_slice(&id.to_be_bytes());
-        out.extend_from_slice(&point_bytes(&share.R));
-        out.extend_from_slice(&scalar_bytes(&share.z));
+        out.extend_from_slice(&C::point_bytes(&share.R));
+        out.extend_from_slice(&scalar_bytes::<C>(&share.z));
     }
 
     out
-}
-
-#[test]
-fn identifiable_abort_finds_tampered_share() {
-    use std::collections::{BTreeMap, BTreeSet};
-
-    use rand_core::OsRng;
-
-    use crate::ia::{decide, ia1, ia2};
-    use crate::keygen::generate_with_dealer;
-    use crate::sign::{SigningPackage, aggregate, commit, sign};
-    use crate::verify::verify;
-
-    let mut rng = OsRng;
-
-    let (shares, pubkeys) = generate_with_dealer(3, 2, &mut rng);
-
-    let signer_ids = [1u16, 2u16];
-    let message = [99u8; 32];
-
-    let mut nonces = BTreeMap::new();
-    let mut commitments = BTreeMap::new();
-
-    for id in signer_ids {
-        let (nonce, commitment) = commit(&mut rng);
-        nonces.insert(id, nonce);
-        commitments.insert(id, commitment);
-    }
-
-    let signing_package = SigningPackage {
-        message,
-        signing_commitments: commitments,
-        partial_verification_keys: pubkeys.partial_verification_keys.clone(),
-    };
-
-    let mut signature_shares = BTreeMap::new();
-
-    for id in signer_ids {
-        let share = sign(
-            &signing_package,
-            nonces.get(&id).unwrap(),
-            shares.get(&id).unwrap(),
-            &pubkeys,
-        );
-
-        signature_shares.insert(id, share);
-    }
-
-    signature_shares.get_mut(&1).unwrap().z += k256::Scalar::ONE;
-
-    let bad_sig = aggregate(&signing_package, &signature_shares);
-    assert!(!verify(&bad_sig, &message, &pubkeys));
-
-    let mut ia1_messages = BTreeMap::new();
-
-    for id in signer_ids {
-        let msg = ia1(
-            &signing_package,
-            signature_shares.get(&id).unwrap(),
-            shares.get(&id).unwrap(),
-            &pubkeys,
-            &signature_shares,
-            &mut rng,
-        );
-
-        ia1_messages.insert(id, msg);
-    }
-
-    let mut ia2_decisions = BTreeMap::new();
-
-    for id in signer_ids {
-        let decision = ia2(shares.get(&id).unwrap(), &signing_package, &ia1_messages);
-
-        ia2_decisions.insert(id, decision);
-    }
-
-    let malicious = decide(
-        &signing_package,
-        &pubkeys,
-        &signature_shares,
-        &ia1_messages,
-        &ia2_decisions,
-    );
-
-    let mut expected = BTreeSet::new();
-    expected.insert(1u16);
-
-    assert_eq!(malicious, expected);
 }

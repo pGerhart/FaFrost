@@ -1,10 +1,11 @@
 #![allow(non_snake_case)]
 
+use crate::ciphersuite::Ciphersuite;
 use crate::utils::{
-    hash_pairwise_key_commitment, pedersen_commit, pedersen_generator, point_bytes,
-    scalar_from_hex, scalar_to_hex,
+    hash_pairwise_key_commitment, pedersen_commit, scalar_from_hex, scalar_to_hex,
 };
-use k256::{ProjectivePoint, Scalar, elliptic_curve::Field};
+use ff::Field;
+use group::Group;
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -21,88 +22,78 @@ pub struct StoredKey {
     pub min_signers: u16,
     pub secret_key_hex: String,
     pub verifying_key_hex: String,
-    pub bip340: bool,
 }
 
 #[derive(Clone)]
-pub struct KeyPackage {
+pub struct KeyPackage<C: Ciphersuite> {
     pub identifier: Identifier,
-    pub signing_share: Scalar,
-    pub signing_share_blinding: Scalar,
+    pub signing_share: C::Scalar,
+    pub signing_share_blinding: C::Scalar,
     pub pairwise_keys: BTreeMap<Identifier, [u8; 32]>,
 }
 
 #[derive(Clone)]
-pub struct PartialVerificationKey {
-    pub signing_share_commitment: ProjectivePoint,
+pub struct PartialVerificationKey<C: Ciphersuite> {
+    pub signing_share_commitment: C::Point,
     pub pairwise_key_commitments: BTreeMap<Identifier, [u8; 32]>,
 }
 
 #[derive(Clone)]
-pub struct PublicKeyPackage {
-    pub verifying_key: ProjectivePoint,
+pub struct PublicKeyPackage<C: Ciphersuite> {
+    pub verifying_key: C::Point,
     pub max_signers: u16,
     pub min_signers: u16,
-    pub pedersen_h: ProjectivePoint,
-    pub partial_verification_keys: BTreeMap<Identifier, PartialVerificationKey>,
+    pub pedersen_h: C::Point,
+    pub partial_verification_keys: BTreeMap<Identifier, PartialVerificationKey<C>>,
 }
 
-pub fn generate_with_dealer<R: RngCore + CryptoRng>(
+pub fn generate_with_dealer<C: Ciphersuite, R: RngCore + CryptoRng>(
     max_signers: u16,
     min_signers: u16,
     rng: &mut R,
-) -> (BTreeMap<Identifier, KeyPackage>, PublicKeyPackage) {
-    let sk = Scalar::random(&mut *rng);
-    generate_with_dealer_from_secret(sk, max_signers, min_signers, rng)
+) -> (BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>) {
+    let sk = C::Scalar::random(&mut *rng);
+    generate_with_dealer_from_secret::<C, R>(sk, max_signers, min_signers, rng)
 }
 
-pub fn generate_with_dealer_from_secret<R: RngCore + CryptoRng>(
-    secret_key: Scalar,
+pub fn generate_with_dealer_from_secret<C: Ciphersuite, R: RngCore + CryptoRng>(
+    secret_key: C::Scalar,
     max_signers: u16,
     min_signers: u16,
     rng: &mut R,
-) -> (BTreeMap<Identifier, KeyPackage>, PublicKeyPackage) {
+) -> (BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>) {
     assert!(min_signers <= max_signers);
 
-    let sk = secret_key;
-    let vk_raw = ProjectivePoint::GENERATOR * sk;
+    let vk_raw = C::Point::generator() * secret_key;
+    let (sk, verifying_key) = C::normalize_keygen(secret_key, vk_raw);
 
-    #[cfg(feature = "bip340")]
-    let (sk, verifying_key) = if crate::bip340::has_odd_y(&vk_raw) {
-        (-sk, -vk_raw)
-    } else {
-        (sk, vk_raw)
-    };
-    #[cfg(not(feature = "bip340"))]
-    let verifying_key = vk_raw;
-
-    let pedersen_h = pedersen_generator();
+    let pedersen_h = C::pedersen_generator();
     let mut coeffs = Vec::new();
     coeffs.push(sk);
 
     for _ in 1..min_signers {
-        coeffs.push(Scalar::random(&mut *rng));
+        coeffs.push(C::Scalar::random(&mut *rng));
     }
 
     let mut shares = BTreeMap::new();
     let mut partial_verification_keys = BTreeMap::new();
 
     for id in 1..=max_signers {
-        let x = Scalar::from(id as u64);
-        let mut y = Scalar::ZERO;
-        let mut pow = Scalar::ONE;
+        let x = C::Scalar::from(id as u64);
+        let mut y = C::Scalar::ZERO;
+        let mut pow = C::Scalar::ONE;
 
         for a in &coeffs {
             y += *a * pow;
             pow *= x;
         }
 
-        let omega_i = Scalar::random(&mut *rng);
-        let vki = pedersen_commit(y, omega_i, pedersen_h);
+        let omega_i = C::Scalar::random(&mut *rng);
+        let vki = pedersen_commit::<C>(y, omega_i, pedersen_h);
 
         shares.insert(
             id,
-            KeyPackage {
+            KeyPackage::<C> {
                 identifier: id,
                 signing_share: y,
                 signing_share_blinding: omega_i,
@@ -112,7 +103,7 @@ pub fn generate_with_dealer_from_secret<R: RngCore + CryptoRng>(
 
         partial_verification_keys.insert(
             id,
-            PartialVerificationKey {
+            PartialVerificationKey::<C> {
                 signing_share_commitment: vki,
                 pairwise_key_commitments: BTreeMap::new(),
             },
@@ -124,7 +115,7 @@ pub fn generate_with_dealer_from_secret<R: RngCore + CryptoRng>(
             let mut k_ij = [0u8; 32];
             rng.fill_bytes(&mut k_ij);
 
-            let K_ij = hash_pairwise_key_commitment(&k_ij);
+            let K_ij = hash_pairwise_key_commitment::<C>(&k_ij);
 
             shares.get_mut(&i).unwrap().pairwise_keys.insert(j, k_ij);
             shares.get_mut(&j).unwrap().pairwise_keys.insert(i, k_ij);
@@ -143,7 +134,7 @@ pub fn generate_with_dealer_from_secret<R: RngCore + CryptoRng>(
         }
     }
 
-    let pubkeys = PublicKeyPackage {
+    let pubkeys = PublicKeyPackage::<C> {
         verifying_key,
         max_signers,
         min_signers,
@@ -154,32 +145,23 @@ pub fn generate_with_dealer_from_secret<R: RngCore + CryptoRng>(
     (shares, pubkeys)
 }
 
-pub fn write_key_yaml<P: AsRef<Path>>(
+pub fn write_key_yaml<C: Ciphersuite, P: AsRef<Path>>(
     path: P,
-    secret_key: Scalar,
+    secret_key: C::Scalar,
     max_signers: u16,
     min_signers: u16,
 ) -> Result<StoredKey, Box<dyn std::error::Error>> {
     assert!(min_signers <= max_signers);
 
-    let vk_raw = ProjectivePoint::GENERATOR * secret_key;
-
-    #[cfg(feature = "bip340")]
-    let (secret_key, verifying_key) = if crate::bip340::has_odd_y(&vk_raw) {
-        (-secret_key, -vk_raw)
-    } else {
-        (secret_key, vk_raw)
-    };
-    #[cfg(not(feature = "bip340"))]
-    let verifying_key = vk_raw;
+    let vk_raw = C::Point::generator() * secret_key;
+    let (secret_key, verifying_key) = C::normalize_keygen(secret_key, vk_raw);
 
     let stored_key = StoredKey {
-        scheme: "FaFROST-secp256k1-SHA256".to_string(),
+        scheme: C::SCHEME_ID.to_string(),
         max_signers,
         min_signers,
-        secret_key_hex: scalar_to_hex(&secret_key),
-        verifying_key_hex: hex::encode(point_bytes(&verifying_key)),
-        bip340: cfg!(feature = "bip340"),
+        secret_key_hex: scalar_to_hex::<C>(&secret_key),
+        verifying_key_hex: hex::encode(C::point_bytes(&verifying_key)),
     };
 
     let yaml = serde_yaml::to_string(&stored_key)?;
@@ -187,29 +169,31 @@ pub fn write_key_yaml<P: AsRef<Path>>(
     Ok(stored_key)
 }
 
-pub fn read_key_yaml<P: AsRef<Path>>(path: P) -> Result<StoredKey, Box<dyn std::error::Error>> {
+pub fn read_key_yaml<C: Ciphersuite, P: AsRef<Path>>(
+    path: P,
+) -> Result<StoredKey, Box<dyn std::error::Error>> {
     let yaml = fs::read_to_string(path)?;
     let stored_key: StoredKey = serde_yaml::from_str(&yaml)?;
-    validate_stored_key(&stored_key)?;
+    validate_stored_key::<C>(&stored_key)?;
     Ok(stored_key)
 }
 
-pub fn generate_with_dealer_from_key_yaml<P: AsRef<Path>, R: RngCore + CryptoRng>(
+pub fn generate_with_dealer_from_key_yaml<C: Ciphersuite, P: AsRef<Path>, R: RngCore + CryptoRng>(
     path: P,
     rng: &mut R,
-) -> Result<(BTreeMap<Identifier, KeyPackage>, PublicKeyPackage), Box<dyn std::error::Error>> {
-    let stored_key = read_key_yaml(path)?;
-    validate_stored_key(&stored_key)?;
-    let secret_key = scalar_from_hex(&stored_key.secret_key_hex)?;
+) -> Result<(BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>), Box<dyn std::error::Error>> {
+    let stored_key = read_key_yaml::<C, _>(path)?;
+    validate_stored_key::<C>(&stored_key)?;
+    let secret_key = scalar_from_hex::<C>(&stored_key.secret_key_hex)?;
 
-    let (shares, pubkeys) = generate_with_dealer_from_secret(
+    let (shares, pubkeys) = generate_with_dealer_from_secret::<C, R>(
         secret_key,
         stored_key.max_signers,
         stored_key.min_signers,
         rng,
     );
 
-    let regenerated_vk_hex = hex::encode(point_bytes(&pubkeys.verifying_key));
+    let regenerated_vk_hex = hex::encode(C::point_bytes(&pubkeys.verifying_key));
     if regenerated_vk_hex != stored_key.verifying_key_hex {
         return Err(
             "stored key YAML is inconsistent: verifying_key_hex does not match secret_key_hex"
@@ -220,9 +204,16 @@ pub fn generate_with_dealer_from_key_yaml<P: AsRef<Path>, R: RngCore + CryptoRng
     Ok((shares, pubkeys))
 }
 
-pub fn validate_stored_key(stored_key: &StoredKey) -> Result<(), Box<dyn std::error::Error>> {
-    if stored_key.scheme != "FaFROST-secp256k1-SHA256" {
-        return Err("unsupported stored key scheme".into());
+pub fn validate_stored_key<C: Ciphersuite>(
+    stored_key: &StoredKey,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if stored_key.scheme != C::SCHEME_ID {
+        return Err(format!(
+            "unsupported stored key scheme: expected {}, found {}",
+            C::SCHEME_ID,
+            stored_key.scheme
+        )
+        .into());
     }
 
     if stored_key.min_signers == 0 {
@@ -237,23 +228,11 @@ pub fn validate_stored_key(stored_key: &StoredKey) -> Result<(), Box<dyn std::er
         return Err("stored key YAML is invalid: min_signers exceeds max_signers".into());
     }
 
-    if stored_key.bip340 != cfg!(feature = "bip340") {
-        return Err("stored key YAML was created with a different bip340 feature setting".into());
-    }
+    let secret_key = scalar_from_hex::<C>(&stored_key.secret_key_hex)?;
+    let vk_raw = C::Point::generator() * secret_key;
+    let (_, verifying_key) = C::normalize_keygen(secret_key, vk_raw);
 
-    let secret_key = scalar_from_hex(&stored_key.secret_key_hex)?;
-    let vk_raw = ProjectivePoint::GENERATOR * secret_key;
-
-    #[cfg(feature = "bip340")]
-    let verifying_key = if crate::bip340::has_odd_y(&vk_raw) {
-        -vk_raw
-    } else {
-        vk_raw
-    };
-    #[cfg(not(feature = "bip340"))]
-    let verifying_key = vk_raw;
-
-    let regenerated_vk_hex = hex::encode(point_bytes(&verifying_key));
+    let regenerated_vk_hex = hex::encode(C::point_bytes(&verifying_key));
     if regenerated_vk_hex != stored_key.verifying_key_hex {
         return Err(
             "stored key YAML is inconsistent: verifying_key_hex does not match secret_key_hex"
@@ -264,24 +243,26 @@ pub fn validate_stored_key(stored_key: &StoredKey) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-pub fn generate_with_dealer_and_write_key_yaml<P: AsRef<Path>, R: RngCore + CryptoRng>(
+pub fn generate_with_dealer_and_write_key_yaml<
+    C: Ciphersuite,
+    P: AsRef<Path>,
+    R: RngCore + CryptoRng,
+>(
     path: P,
     max_signers: u16,
     min_signers: u16,
     rng: &mut R,
-) -> Result<
-    (
-        BTreeMap<Identifier, KeyPackage>,
-        PublicKeyPackage,
-        StoredKey,
-    ),
-    Box<dyn std::error::Error>,
-> {
-    let secret_key = Scalar::random(&mut *rng);
-    let stored_key = write_key_yaml(path, secret_key, max_signers, min_signers)?;
-    let normalized_secret_key = scalar_from_hex(&stored_key.secret_key_hex)?;
-    let (shares, pubkeys) =
-        generate_with_dealer_from_secret(normalized_secret_key, max_signers, min_signers, rng);
+) -> Result<(BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>, StoredKey), Box<dyn std::error::Error>>
+{
+    let secret_key = C::Scalar::random(&mut *rng);
+    let stored_key = write_key_yaml::<C, P>(path, secret_key, max_signers, min_signers)?;
+    let normalized_secret_key = scalar_from_hex::<C>(&stored_key.secret_key_hex)?;
+    let (shares, pubkeys) = generate_with_dealer_from_secret::<C, R>(
+        normalized_secret_key,
+        max_signers,
+        min_signers,
+        rng,
+    );
 
     Ok((shares, pubkeys, stored_key))
 }

@@ -1,15 +1,19 @@
-use k256::ProjectivePoint;
+use group::Group;
 
+use crate::ciphersuite::Ciphersuite;
 use crate::keygen::PublicKeyPackage;
 use crate::sign::Signature;
 
-pub fn verify(signature: &Signature, message: &[u8; 32], pubkeys: &PublicKeyPackage) -> bool {
-    #[cfg(feature = "bip340")]
-    if crate::bip340::has_odd_y(&signature.R) {
+pub fn verify<C: Ciphersuite>(
+    signature: &Signature<C>,
+    message: &[u8; 32],
+    pubkeys: &PublicKeyPackage<C>,
+) -> bool {
+    if !C::accept_r(&signature.R) {
         return false;
     }
 
-    let c = pubkeys.challenge_scalar(&signature.R, message);
+    let c = C::challenge(&pubkeys.verifying_key, &signature.R, message);
 
-    ProjectivePoint::GENERATOR * signature.z == signature.R + pubkeys.verifying_key * c
+    C::Point::generator() * signature.z == signature.R + pubkeys.verifying_key * c
 }
