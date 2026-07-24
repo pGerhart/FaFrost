@@ -27,17 +27,19 @@ The protocol logic is generic over the ciphersuite and split across a small set 
 
 | Module | Description |
 |---|---|
-| `ciphersuite.rs` | The `Ciphersuite`/`ScalarHasher` traits: group, scalar, hash, challenge, and normalisation hooks |
-| `secp256k1.rs` | secp256k1 backends: `Secp256k1Plain` and `Secp256k1Bip340` |
-| `ed25519.rs` | edwards25519 backend `Ed25519`, plus a standalone RFC 8032 verifier and wire serialisers |
+| `ciphersuite/mod.rs` | The `Ciphersuite`/`ScalarHasher` traits: group, scalar, hash, challenge, and normalisation hooks |
+| `ciphersuite/secp256k1.rs` | secp256k1 backends: `Secp256k1Plain` and `Secp256k1Bip340` |
+| `ciphersuite/ed25519.rs` | edwards25519 backend `Ed25519`, plus a standalone RFC 8032 verifier and wire serialisers |
+| `ciphersuite/bip340.rs` | BIP-340 low-level primitives (even-y normalisation, x-only encoding, tagged-hash challenge) |
 | `keygen.rs` | Idealized dealer-based key generation |
 | `sign.rs` | Signing, nonce commitment, and share aggregation |
 | `verify.rs` | Signature verification |
 | `ia.rs` | Identifiable aborts protocol |
-| `bip340.rs` | BIP-340 low-level primitives (even-y normalisation, x-only encoding, tagged-hash challenge) |
 | `utils.rs` | Shared cryptographic primitives (Pedersen commitments, Lagrange coefficients, encodings) |
 
-Runnable examples live under `src/bin/`: key generation, Taproot address derivation, and a full Bitcoin testnet spend. The Bitcoin binaries instantiate the `Secp256k1Bip340` ciphersuite.
+The ciphersuites live under `src/ciphersuite/` and are re-exported at the crate root, so their public paths (`fafrost::ed25519`, `fafrost::bip340`, ...) are unchanged.
+
+Runnable examples live under `src/bin/`: key generation, Taproot address derivation, and a full Bitcoin testnet spend. The Bitcoin binaries instantiate the `Secp256k1Bip340` ciphersuite and require the `bitcoin-demo` feature (see below); key generation builds by default.
 
 The abstraction follows the standard FROST design (cf. the ZF `frost-core` split): every function is generic over `C: Ciphersuite`, using ordinary `+`/`*` operators via the RustCrypto `group`/`ff` traits, which both `k256` and `curve25519-dalek` implement. Only the scheme-specific points — challenge hash, wire encoding, even-y normalisation, and the Pedersen generator — are ciphersuite methods.
 
@@ -52,6 +54,15 @@ cargo test
 The tests cover key generation, signing, verification, and identifiable aborts for `Secp256k1Plain`, `Secp256k1Bip340`, and `Ed25519`, plus the Ed25519 interop test.
 
 > Note: the mode is now chosen by the ciphersuite **type**, not a Cargo feature. The old `--features bip340` flag has been removed.
+
+**Bitcoin demos.** The `generateaddress` and `spenddemo` binaries depend on the `bitcoin` and `bitcoin_hashes` crates (both CC0-1.0), which are kept out of the default build so the core crate ships under OSI-approved licenses only. Build them behind the `bitcoin-demo` feature:
+
+```
+cargo run --features bitcoin-demo --bin generateaddress
+cargo run --features bitcoin-demo --bin spenddemo
+```
+
+The library, the `keygen` binary, the tests, and the benchmarks build without the feature.
 
 # EdDSA / Ed25519 interop
 

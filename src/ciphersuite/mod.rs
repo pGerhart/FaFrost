@@ -3,10 +3,15 @@
 //! the rest of the crate is generic over `C: Ciphersuite`.
 #![allow(non_snake_case)]
 
+pub mod bip340;
+pub mod ed25519;
+pub mod secp256k1;
+
 use std::vec::Vec;
 
-use ff::PrimeField;
+use ff::{FromUniformBytes, PrimeField};
 use group::{Group, GroupEncoding};
+use zeroize::Zeroize;
 
 /// Hash accumulator finalising to a scalar. `Clone` captures the current state,
 /// so a shared prefix can be hashed once and then branched per peer.
@@ -24,7 +29,7 @@ pub trait ScalarHasher: Clone {
 }
 
 pub trait Ciphersuite: Copy + Clone + 'static {
-    type Scalar: PrimeField + From<u64>;
+    type Scalar: PrimeField + From<u64> + FromUniformBytes<64> + Zeroize;
     type Point: Group<Scalar = Self::Scalar> + GroupEncoding;
     type Hasher: ScalarHasher<Scalar = Self::Scalar>;
 
@@ -42,6 +47,17 @@ pub trait Ciphersuite: Copy + Clone + 'static {
 
     fn point_bytes(p: &Self::Point) -> Vec<u8> {
         p.to_bytes().as_ref().to_vec()
+    }
+
+    /// Domain-separated 32-byte commitment hash, using the ciphersuite's own hash
+    /// family (`SHA-256` for secp256k1, `SHA-512` truncated for ed25519). Used for
+    /// the binding commitments to the pairwise keys.
+    fn hash_commitment(parts: &[&[u8]]) -> [u8; 32];
+
+    /// Fixed-base multiplication `scalar * G`. The default uses the generic group
+    /// multiplication; ciphersuites override it with a precomputed-table routine.
+    fn mul_generator(scalar: &Self::Scalar) -> Self::Point {
+        Self::Point::generator() * *scalar
     }
 
     /// Second generator for the IA Pedersen commitments, discrete log unknown.

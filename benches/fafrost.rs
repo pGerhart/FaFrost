@@ -64,7 +64,7 @@ fn make_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> Setup<C> {
 
     let mut signature_shares = BTreeMap::new();
     for &id in &signer_ids {
-        let share = sign(&signing_package, &nonces_map[&id], &shares[&id], &pubkeys);
+        let share = sign(&signing_package, &nonces_map[&id], &shares[&id], &pubkeys).unwrap();
         signature_shares.insert(id, share);
     }
 
@@ -106,7 +106,7 @@ fn make_ia_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> IASetup<
 
     let mut signature_shares = BTreeMap::new();
     for &id in &signer_ids {
-        let share = sign(&signing_package, &nonces[&id], &shares[&id], &pubkeys);
+        let share = sign(&signing_package, &nonces[&id], &shares[&id], &pubkeys).unwrap();
         signature_shares.insert(id, share);
     }
 
@@ -119,13 +119,14 @@ fn make_ia_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> IASetup<
             &pubkeys,
             &signature_shares,
             &mut rng,
-        );
+        )
+        .unwrap();
         ia1_messages.insert(id, msg);
     }
 
     let mut ia2_decisions = BTreeMap::new();
     for &id in &signer_ids {
-        let decision = ia2(&shares[&id], &signing_package, &ia1_messages);
+        let decision = ia2(&shares[&id], &signing_package, &ia1_messages).unwrap();
         ia2_decisions.insert(id, decision);
     }
 

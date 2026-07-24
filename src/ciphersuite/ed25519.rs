@@ -11,7 +11,7 @@ use curve25519_dalek::scalar::Scalar;
 use group::Group;
 use sha2::{Digest, Sha512};
 
-use crate::ciphersuite::{Ciphersuite, ScalarHasher};
+use super::{Ciphersuite, ScalarHasher};
 use crate::keygen::PublicKeyPackage;
 use crate::sign::Signature;
 
@@ -77,6 +77,19 @@ impl Ciphersuite for Ed25519 {
 
     const CONTEXT: &'static str = "FaFROST/ed25519/SHA512";
     const SCHEME_ID: &'static str = "FaFROST-ed25519";
+
+    fn hash_commitment(parts: &[&[u8]]) -> [u8; 32] {
+        let mut h = Sha512::new();
+        for p in parts {
+            h.update(p);
+        }
+        let full: [u8; 64] = h.finalize().into();
+        full[..32].try_into().expect("32-byte prefix")
+    }
+
+    fn mul_generator(scalar: &Scalar) -> EdwardsPoint {
+        EdwardsPoint::mul_base(scalar)
+    }
 
     fn pedersen_generator() -> EdwardsPoint {
         ed25519_pedersen_generator()

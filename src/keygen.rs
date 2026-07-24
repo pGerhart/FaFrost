@@ -1,21 +1,25 @@
 #![allow(non_snake_case)]
 
 use crate::ciphersuite::Ciphersuite;
-use crate::utils::{
-    hash_pairwise_key_commitment, pedersen_commit, scalar_from_hex, scalar_to_hex,
-};
+use crate::utils::{hash_pairwise_key_commitment, pedersen_commit, scalar_from_hex, scalar_to_hex};
 use ff::Field;
-use group::Group;
 use rand_core::CryptoRng;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 use std::vec::Vec;
+use zeroize::Zeroize;
 
 pub type Identifier = u16;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+/// Per-signer secret key packages produced by the dealer, keyed by identifier.
+pub type KeyShares<C> = BTreeMap<Identifier, KeyPackage<C>>;
+
+/// Dealer output paired with the serialisable key file it was generated from.
+pub type KeySharesWithStored<C> = (KeyShares<C>, PublicKeyPackage<C>, StoredKey);
+
+#[derive(Clone, Serialize, Deserialize)]
 pub struct StoredKey {
     pub scheme: String,
     pub max_signers: u16,
@@ -24,12 +28,29 @@ pub struct StoredKey {
     pub verifying_key_hex: String,
 }
 
+impl Drop for StoredKey {
+    fn drop(&mut self) {
+        self.secret_key_hex.zeroize();
+    }
+}
+
 #[derive(Clone)]
 pub struct KeyPackage<C: Ciphersuite> {
     pub identifier: Identifier,
     pub signing_share: C::Scalar,
     pub signing_share_blinding: C::Scalar,
     pub pairwise_keys: BTreeMap<Identifier, [u8; 32]>,
+}
+
+/// Zeroizes the secret key share, its blinding, and every pairwise key on drop.
+impl<C: Ciphersuite> Drop for KeyPackage<C> {
+    fn drop(&mut self) {
+        self.signing_share.zeroize();
+        self.signing_share_blinding.zeroize();
+        for key in self.pairwise_keys.values_mut() {
+            key.zeroize();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -51,7 +72,7 @@ pub fn generate_with_dealer<C: Ciphersuite, R: CryptoRng>(
     max_signers: u16,
     min_signers: u16,
     rng: &mut R,
-) -> (BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>) {
+) -> (KeyShares<C>, PublicKeyPackage<C>) {
     let sk = C::Scalar::random(&mut *rng);
     generate_with_dealer_from_secret::<C, R>(sk, max_signers, min_signers, rng)
 }
@@ -61,10 +82,10 @@ pub fn generate_with_dealer_from_secret<C: Ciphersuite, R: CryptoRng>(
     max_signers: u16,
     min_signers: u16,
     rng: &mut R,
-) -> (BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>) {
+) -> (KeyShares<C>, PublicKeyPackage<C>) {
     assert!(min_signers <= max_signers);
 
-    let vk_raw = C::Point::generator() * secret_key;
+    let vk_raw = C::mul_generator(&secret_key);
     let (sk, verifying_key) = C::normalize_keygen(secret_key, vk_raw);
 
     let pedersen_h = C::pedersen_generator();
@@ -153,7 +174,7 @@ pub fn write_key_yaml<C: Ciphersuite, P: AsRef<Path>>(
 ) -> Result<StoredKey, Box<dyn std::error::Error>> {
     assert!(min_signers <= max_signers);
 
-    let vk_raw = C::Point::generator() * secret_key;
+    let vk_raw = C::mul_generator(&secret_key);
     let (secret_key, verifying_key) = C::normalize_keygen(secret_key, vk_raw);
 
     let stored_key = StoredKey {
@@ -181,9 +202,8 @@ pub fn read_key_yaml<C: Ciphersuite, P: AsRef<Path>>(
 pub fn generate_with_dealer_from_key_yaml<C: Ciphersuite, P: AsRef<Path>, R: CryptoRng>(
     path: P,
     rng: &mut R,
-) -> Result<(BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>), Box<dyn std::error::Error>> {
+) -> Result<(KeyShares<C>, PublicKeyPackage<C>), Box<dyn std::error::Error>> {
     let stored_key = read_key_yaml::<C, _>(path)?;
-    validate_stored_key::<C>(&stored_key)?;
     let secret_key = scalar_from_hex::<C>(&stored_key.secret_key_hex)?;
 
     let (shares, pubkeys) = generate_with_dealer_from_secret::<C, R>(
@@ -229,7 +249,7 @@ pub fn validate_stored_key<C: Ciphersuite>(
     }
 
     let secret_key = scalar_from_hex::<C>(&stored_key.secret_key_hex)?;
-    let vk_raw = C::Point::generator() * secret_key;
+    let vk_raw = C::mul_generator(&secret_key);
     let (_, verifying_key) = C::normalize_keygen(secret_key, vk_raw);
 
     let regenerated_vk_hex = hex::encode(C::point_bytes(&verifying_key));
@@ -243,17 +263,12 @@ pub fn validate_stored_key<C: Ciphersuite>(
     Ok(())
 }
 
-pub fn generate_with_dealer_and_write_key_yaml<
-    C: Ciphersuite,
-    P: AsRef<Path>,
-    R: CryptoRng,
->(
+pub fn generate_with_dealer_and_write_key_yaml<C: Ciphersuite, P: AsRef<Path>, R: CryptoRng>(
     path: P,
     max_signers: u16,
     min_signers: u16,
     rng: &mut R,
-) -> Result<(BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>, StoredKey), Box<dyn std::error::Error>>
-{
+) -> Result<KeySharesWithStored<C>, Box<dyn std::error::Error>> {
     let secret_key = C::Scalar::random(&mut *rng);
     let stored_key = write_key_yaml::<C, P>(path, secret_key, max_signers, min_signers)?;
     let normalized_secret_key = scalar_from_hex::<C>(&stored_key.secret_key_hex)?;

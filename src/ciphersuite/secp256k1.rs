@@ -6,8 +6,8 @@ use k256::hash2curve::GroupDigest;
 use k256::{FieldBytes, ProjectivePoint, Scalar, Secp256k1};
 use sha2::{Digest, Sha256};
 
-use crate::bip340;
-use crate::ciphersuite::{Ciphersuite, ScalarHasher};
+use super::bip340;
+use super::{Ciphersuite, ScalarHasher};
 
 #[derive(Clone)]
 pub struct Sha256ScalarHasher(Sha256);
@@ -41,6 +41,15 @@ fn secp_pedersen_generator() -> ProjectivePoint {
     h
 }
 
+/// `SHA-256` commitment hash shared by both secp256k1 ciphersuites.
+fn secp_hash_commitment(parts: &[&[u8]]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    for p in parts {
+        h.update(p);
+    }
+    h.finalize().into()
+}
+
 #[derive(Copy, Clone, Debug)]
 pub struct Secp256k1Plain;
 
@@ -51,6 +60,10 @@ impl Ciphersuite for Secp256k1Plain {
 
     const CONTEXT: &'static str = "FaFROST/secp256k1/SHA256";
     const SCHEME_ID: &'static str = "FaFROST-secp256k1-plain";
+
+    fn hash_commitment(parts: &[&[u8]]) -> [u8; 32] {
+        secp_hash_commitment(parts)
+    }
 
     fn pedersen_generator() -> ProjectivePoint {
         secp_pedersen_generator()
@@ -75,6 +88,10 @@ impl Ciphersuite for Secp256k1Bip340 {
     // only the external `challenge` and the wire encoding follow BIP-340.
     const CONTEXT: &'static str = "FaFROST/secp256k1/SHA256";
     const SCHEME_ID: &'static str = "FaFROST-secp256k1-bip340";
+
+    fn hash_commitment(parts: &[&[u8]]) -> [u8; 32] {
+        secp_hash_commitment(parts)
+    }
 
     fn pedersen_generator() -> ProjectivePoint {
         secp_pedersen_generator()

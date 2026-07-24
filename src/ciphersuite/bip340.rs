@@ -7,8 +7,8 @@ use k256::elliptic_curve::{
 use k256::{AffinePoint, FieldBytes, ProjectivePoint, Scalar, Secp256k1};
 use sha2::{Digest, Sha256};
 
+use super::secp256k1::Secp256k1Bip340;
 use crate::keygen::PublicKeyPackage;
-use crate::secp256k1::Secp256k1Bip340;
 use crate::sign::Signature;
 
 pub fn has_odd_y(point: &ProjectivePoint) -> bool {

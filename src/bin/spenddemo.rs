@@ -140,12 +140,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             nonces.get(&id).unwrap(),
             signing_shares.get(&id).unwrap(),
             &signing_pubkeys,
-        );
+        )?;
 
         signature_shares.insert(id, share);
     }
 
-    let mut sig = aggregate(&signing_package, &signature_shares);
+    let mut sig = aggregate(&signing_package, &signature_shares)?;
 
     let c = bip340_challenge_scalar(
         &x_only_bytes(&sig.R),
@@ -163,7 +163,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &x_only_bytes(&signing_pubkeys.verifying_key),
     ));
 
-    tx.input[0].witness.push(sig_bytes.to_vec());
+    tx.input[0].witness.push(sig_bytes);
 
     let raw_tx = hex::encode(serialize(&tx));
 

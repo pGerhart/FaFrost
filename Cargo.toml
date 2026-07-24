@@ -2,9 +2,10 @@
 name = "fafrost"
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
+authors = ["Paul Gerhart"]
 
 [dependencies]
-bitcoin = "0.32"
 rand = "0.10"
 rand_core = "0.10"
 sha2 = "0.11"
@@ -20,16 +21,34 @@ curve25519-dalek = { version = "5", features = [
 ] }
 group = "0.14"
 ff = "0.14"
+merlin = "3"
+zeroize = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 hex = "0.4"
-bitcoin_hashes = "0.14"
+
+# Only the Bitcoin key-spend demos need these; both are CC0-1.0, kept out of the
+# default build so the core crate ships under OSI-approved licenses only.
+bitcoin = { version = "0.32", optional = true }
+bitcoin_hashes = { version = "0.14", optional = true }
+
+[features]
+# Builds the `generateaddress` and `spenddemo` Bitcoin binaries.
+bitcoin-demo = ["dep:bitcoin", "dep:bitcoin_hashes"]
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports"] }
 
 # RFC 8032 verifier.
 ed25519-dalek = "3"
+
+[[bin]]
+name = "generateaddress"
+required-features = ["bitcoin-demo"]
+
+[[bin]]
+name = "spenddemo"
+required-features = ["bitcoin-demo"]
 
 [[bench]]
 name = "fafrost"

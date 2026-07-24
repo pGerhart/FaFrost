@@ -3,16 +3,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::vec::Vec;
 
-use ff::Field;
+use ff::{Field, FromUniformBytes};
 use group::Group;
+use merlin::Transcript;
 use rand_core::CryptoRng;
 
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
+use crate::error::{Error, Result};
 use crate::keygen::{Identifier, KeyPackage, PublicKeyPackage};
 use crate::sign::{SignatureShare, SigningPackage};
 use crate::utils::{
-    delta, encode_commitments, encode_signer_set, hash_pairwise_key_commitment, lagrange,
-    pedersen_commit, scalar_bytes,
+    binding_factor, blinding_base, blinding_randomizer, delta, encode_commitments,
+    encode_signer_set, hash_pairwise_key_commitment, lagrange, pedersen_commit, scalar_bytes,
 };
 
 #[derive(Clone)]
@@ -47,7 +49,7 @@ pub fn ia1<C: Ciphersuite, R: CryptoRng>(
     pubkeys: &PublicKeyPackage<C>,
     all_signature_shares: &BTreeMap<Identifier, SignatureShare<C>>,
     rng: &mut R,
-) -> IA1Message<C> {
+) -> Result<IA1Message<C>> {
     let ids: Vec<Identifier> = signing_package
         .signing_commitments
         .keys()
@@ -56,20 +58,20 @@ pub fn ia1<C: Ciphersuite, R: CryptoRng>(
 
     let i = key_package.identifier;
 
-    assert_eq!(signature_share.identifier, i);
-    assert!(ids.contains(&i));
+    if signature_share.identifier != i || !ids.contains(&i) {
+        return Err(Error::UnknownSigner(i));
+    }
 
     let commitments_bytes = encode_commitments::<C>(&signing_package.signing_commitments);
 
     let signer_set_bytes = encode_signer_set(&ids);
     let view_bytes = ia_view_bytes::<C>(signing_package, all_signature_shares);
 
-    let mut b_base = C::Hasher::new();
-    b_base.update(C::CONTEXT.as_bytes());
-    b_base.update(b"/Hs");
-    b_base.update(&commitments_bytes);
-    b_base.update(&signing_package.message);
-    b_base.update(&signer_set_bytes);
+    let b_base = blinding_base::<C>(
+        &commitments_bytes,
+        &signing_package.message,
+        &signer_set_bytes,
+    );
 
     let mut blinding_values = BTreeMap::new();
     let mut blinding_randomizers = BTreeMap::new();
@@ -83,12 +85,10 @@ pub fn ia1<C: Ciphersuite, R: CryptoRng>(
         let k_ij = key_package
             .pairwise_keys
             .get(j)
-            .expect("missing pairwise key");
+            .ok_or(Error::MissingPairwiseKey(*j))?;
 
         let B_ij = b_base.clone().finish_with(k_ij);
-
-        let omega_ij =
-            C::hash_to_scalar(&[C::CONTEXT.as_bytes(), b"/HIA", k_ij, &view_bytes]);
+        let omega_ij = blinding_randomizer::<C>(k_ij, &view_bytes);
 
         let C_ij = pedersen_commit::<C>(B_ij, omega_ij, pubkeys.pedersen_h);
 
@@ -108,18 +108,18 @@ pub fn ia1<C: Ciphersuite, R: CryptoRng>(
         rng,
     );
 
-    IA1Message {
+    Ok(IA1Message {
         identifier: i,
         blinding_commitments,
         proof,
-    }
+    })
 }
 
 pub fn ia2<C: Ciphersuite>(
     key_package: &KeyPackage<C>,
     signing_package: &SigningPackage<C>,
     ia1_messages: &BTreeMap<Identifier, IA1Message<C>>,
-) -> IA2Decision {
+) -> Result<IA2Decision> {
     let i = key_package.identifier;
 
     let ids: Vec<Identifier> = signing_package
@@ -128,7 +128,7 @@ pub fn ia2<C: Ciphersuite>(
         .copied()
         .collect();
 
-    let own = ia1_messages.get(&i).expect("missing own IA1 message");
+    let own = ia1_messages.get(&i).ok_or(Error::MissingIa1Message(i))?;
 
     let mut opened_pairwise_keys = BTreeMap::new();
 
@@ -140,29 +140,29 @@ pub fn ia2<C: Ciphersuite>(
         let C_ij = own
             .blinding_commitments
             .get(&j)
-            .expect("missing own blinding commitment");
+            .ok_or(Error::MissingBlindingCommitment { from: i, about: j })?;
 
         let C_ji = ia1_messages
             .get(&j)
-            .expect("missing peer IA1 message")
+            .ok_or(Error::MissingIa1Message(j))?
             .blinding_commitments
             .get(&i)
-            .expect("missing peer blinding commitment");
+            .ok_or(Error::MissingBlindingCommitment { from: j, about: i })?;
 
         if C_ij != C_ji {
             let k_ij = key_package
                 .pairwise_keys
                 .get(&j)
-                .expect("missing pairwise key");
+                .ok_or(Error::MissingPairwiseKey(j))?;
 
             opened_pairwise_keys.insert(j, *k_ij);
         }
     }
 
-    IA2Decision {
+    Ok(IA2Decision {
         identifier: i,
         opened_pairwise_keys,
-    }
+    })
 }
 
 pub fn decide<C: Ciphersuite>(
@@ -200,6 +200,11 @@ pub fn decide<C: Ciphersuite>(
 
     let signer_set_bytes = encode_signer_set(&ids);
     let view_bytes = ia_view_bytes::<C>(signing_package, signature_shares);
+    let b_base = blinding_base::<C>(
+        &commitments_bytes,
+        &signing_package.message,
+        &signer_set_bytes,
+    );
 
     for (accuser, decision) in ia2_decisions {
         for (peer, opened_key) in &decision.opened_pairwise_keys {
@@ -219,18 +224,8 @@ pub fn decide<C: Ciphersuite>(
                 continue;
             }
 
-            let B = {
-                let mut h = C::Hasher::new();
-                h.update(C::CONTEXT.as_bytes());
-                h.update(b"/Hs");
-                h.update(&commitments_bytes);
-                h.update(&signing_package.message);
-                h.update(&signer_set_bytes);
-                h.finish_with(opened_key)
-            };
-
-            let omega =
-                C::hash_to_scalar(&[C::CONTEXT.as_bytes(), b"/HIA", opened_key, &view_bytes]);
+            let B = b_base.clone().finish_with(opened_key);
+            let omega = blinding_randomizer::<C>(opened_key, &view_bytes);
 
             let expected_commitment = pedersen_commit::<C>(B, omega, pubkeys.pedersen_h);
 
@@ -301,6 +296,10 @@ pub fn decide<C: Ciphersuite>(
     malicious
 }
 
+// The parameters are the sigma-protocol inputs (statement, witness, blinding
+// openings); grouping them into a struct would only obscure the correspondence
+// to the relation R, so the argument list is kept explicit.
+#[allow(clippy::too_many_arguments)]
 fn prove_wellformed<C: Ciphersuite, R: CryptoRng>(
     signing_package: &SigningPackage<C>,
     signature_share: &SignatureShare<C>,
@@ -515,9 +514,8 @@ fn verify_wellformed_proof<C: Ciphersuite>(
             return false;
         };
 
-        let rhs = C::Point::generator() * *z_B
-            + pubkeys.pedersen_h * *z_omega
-            + *C_ij * (-challenge);
+        let rhs =
+            C::Point::generator() * *z_B + pubkeys.pedersen_h * *z_omega + *C_ij * (-challenge);
 
         if rhs != *t_j {
             return false;
@@ -539,16 +537,12 @@ fn nonce_challenge<C: Ciphersuite>(
 
     let commitments_bytes = encode_commitments::<C>(&signing_package.signing_commitments);
 
-    let vk_bytes = C::point_bytes(&pubkeys.verifying_key);
-
-    C::hash_to_scalar(&[
-        C::CONTEXT.as_bytes(),
-        b"/Hnon",
-        &vk_bytes,
+    binding_factor::<C>(
+        &pubkeys.verifying_key,
         &encode_signer_set(&ids),
         &signing_package.message,
         &commitments_bytes,
-    ])
+    )
 }
 
 fn sig_challenge<C: Ciphersuite>(
@@ -570,6 +564,9 @@ fn sig_challenge<C: Ciphersuite>(
     C::challenge(&pubkeys.verifying_key, &R, &signing_package.message)
 }
 
+// Every argument is absorbed into the Fiat-Shamir transcript; the list mirrors
+// the transcript contents and is clearer kept flat than bundled.
+#[allow(clippy::too_many_arguments)]
 fn proof_challenge<C: Ciphersuite>(
     signing_package: &SigningPackage<C>,
     signature_share: &SignatureShare<C>,
@@ -581,35 +578,38 @@ fn proof_challenge<C: Ciphersuite>(
     b: C::Scalar,
     c: C::Scalar,
 ) -> C::Scalar {
-    let mut transcript = Vec::new();
+    let mut transcript = Transcript::new(b"FaFROST/IAProof");
+    transcript.append_message(b"ctx", C::CONTEXT.as_bytes());
 
-    transcript.extend_from_slice(C::CONTEXT.as_bytes());
-    transcript.extend_from_slice(b"/IAProof");
+    transcript.append_message(b"signer", &signature_share.identifier.to_be_bytes());
+    transcript.append_message(b"msg", &signing_package.message);
+    transcript.append_message(b"b", &scalar_bytes::<C>(&b));
+    transcript.append_message(b"c", &scalar_bytes::<C>(&c));
+    transcript.append_message(b"z", &scalar_bytes::<C>(&signature_share.z));
+    transcript.append_message(b"R", &C::point_bytes(&signature_share.R));
+    transcript.append_message(b"vk", &C::point_bytes(&pubkeys.verifying_key));
 
-    transcript.extend_from_slice(&signature_share.identifier.to_be_bytes());
-    transcript.extend_from_slice(&signing_package.message);
-    transcript.extend_from_slice(&scalar_bytes::<C>(&b));
-    transcript.extend_from_slice(&scalar_bytes::<C>(&c));
-    transcript.extend_from_slice(&scalar_bytes::<C>(&signature_share.z));
-    transcript.extend_from_slice(&C::point_bytes(&signature_share.R));
-    transcript.extend_from_slice(&C::point_bytes(&pubkeys.verifying_key));
-
-    transcript.extend_from_slice(&encode_commitments::<C>(&signing_package.signing_commitments));
+    transcript.append_message(
+        b"commitments",
+        &encode_commitments::<C>(&signing_package.signing_commitments),
+    );
 
     for (id, C_pt) in blinding_commitments {
-        transcript.extend_from_slice(&id.to_be_bytes());
-        transcript.extend_from_slice(&C::point_bytes(C_pt));
+        transcript.append_message(b"blind-id", &id.to_be_bytes());
+        transcript.append_message(b"blind-commit", &C::point_bytes(C_pt));
     }
 
-    transcript.extend_from_slice(&C::point_bytes(t_sig));
-    transcript.extend_from_slice(&C::point_bytes(t_key));
+    transcript.append_message(b"t_sig", &C::point_bytes(t_sig));
+    transcript.append_message(b"t_key", &C::point_bytes(t_key));
 
     for (id, T) in t_blind {
-        transcript.extend_from_slice(&id.to_be_bytes());
-        transcript.extend_from_slice(&C::point_bytes(T));
+        transcript.append_message(b"t_blind-id", &id.to_be_bytes());
+        transcript.append_message(b"t_blind", &C::point_bytes(T));
     }
 
-    C::hash_to_scalar(&[&transcript])
+    let mut challenge_bytes = [0u8; 64];
+    transcript.challenge_bytes(b"challenge", &mut challenge_bytes);
+    C::Scalar::from_uniform_bytes(&challenge_bytes)
 }
 
 fn ia_view_bytes<C: Ciphersuite>(
@@ -618,7 +618,9 @@ fn ia_view_bytes<C: Ciphersuite>(
 ) -> Vec<u8> {
     let mut out = Vec::new();
 
-    out.extend_from_slice(&encode_commitments::<C>(&signing_package.signing_commitments));
+    out.extend_from_slice(&encode_commitments::<C>(
+        &signing_package.signing_commitments,
+    ));
 
     for (id, share) in signature_shares {
         out.extend_from_slice(&id.to_be_bytes());

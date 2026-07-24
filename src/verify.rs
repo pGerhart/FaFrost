@@ -1,5 +1,3 @@
-use group::Group;
-
 use crate::ciphersuite::Ciphersuite;
 use crate::keygen::PublicKeyPackage;
 use crate::sign::Signature;
@@ -15,5 +13,5 @@ pub fn verify<C: Ciphersuite>(
 
     let c = C::challenge(&pubkeys.verifying_key, &signature.R, message);
 
-    C::Point::generator() * signature.z == signature.R + pubkeys.verifying_key * c
+    C::mul_generator(&signature.z) == signature.R + pubkeys.verifying_key * c
 }

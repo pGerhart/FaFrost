@@ -1,12 +1,16 @@
 #![allow(non_snake_case)]
 
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
-use crate::utils::{encode_commitments, encode_signer_set, lagrange};
+use crate::error::{Error, Result};
+use crate::utils::{
+    binding_factor, blinding_base, encode_commitments, encode_signer_set, lagrange,
+};
 use std::collections::BTreeMap;
 use std::vec::Vec;
 
 use ff::Field;
 use group::Group;
+use zeroize::Zeroize;
 
 use rand_core::CryptoRng;
 
@@ -16,6 +20,14 @@ use crate::keygen::{Identifier, KeyPackage, PartialVerificationKey, PublicKeyPac
 pub struct SigningNonces<C: Ciphersuite> {
     pub d: C::Scalar,
     pub e: C::Scalar,
+}
+
+/// Zeroizes the one-time nonces on drop.
+impl<C: Ciphersuite> Drop for SigningNonces<C> {
+    fn drop(&mut self) {
+        self.d.zeroize();
+        self.e.zeroize();
+    }
 }
 
 #[derive(Clone)]
@@ -61,8 +73,8 @@ pub fn commit<C: Ciphersuite, R: CryptoRng>(
     let d = C::Scalar::random(&mut *rng);
     let e = C::Scalar::random(rng);
 
-    let D = C::Point::generator() * d;
-    let E = C::Point::generator() * e;
+    let D = C::mul_generator(&d);
+    let E = C::mul_generator(&e);
 
     (SigningNonces { d, e }, SigningCommitments { D, E })
 }
@@ -72,34 +84,29 @@ pub fn sign<C: Ciphersuite>(
     signer_nonces: &SigningNonces<C>,
     key_package: &KeyPackage<C>,
     pubkeys: &PublicKeyPackage<C>,
-) -> SignatureShare<C> {
+) -> Result<SignatureShare<C>> {
     let ids: Vec<Identifier> = signing_package
         .signing_commitments
         .keys()
         .copied()
         .collect();
 
-    assert!(
-        signing_package
-            .signing_commitments
-            .contains_key(&key_package.identifier)
-    );
-
-    assert!(
-        signing_package
-            .partial_verification_keys
-            .contains_key(&key_package.identifier)
-    );
+    let i = key_package.identifier;
 
     let commitments_bytes = encode_commitments::<C>(&signing_package.signing_commitments);
 
     let signer_commitment = signing_package
         .signing_commitments
-        .get(&key_package.identifier)
-        .unwrap();
+        .get(&i)
+        .ok_or(Error::UnknownSigner(i))?;
 
-    assert_eq!(signer_commitment.D, C::Point::generator() * signer_nonces.d);
-    assert_eq!(signer_commitment.E, C::Point::generator() * signer_nonces.e);
+    // The coordinator must have published this signer's own commitment `(D_i, E_i)`
+    // for exactly the nonce it holds; a mismatch means a wrong or tampered session.
+    if signer_commitment.D != C::mul_generator(&signer_nonces.d)
+        || signer_commitment.E != C::mul_generator(&signer_nonces.e)
+    {
+        return Err(Error::NonceCommitmentMismatch(i));
+    }
 
     let mut D = C::Point::identity();
     let mut E = C::Point::identity();
@@ -109,38 +116,35 @@ pub fn sign<C: Ciphersuite>(
         E += c.E;
     }
 
-    let vk_bytes = C::point_bytes(&pubkeys.verifying_key);
-
-    let b = C::hash_to_scalar(&[
-        C::CONTEXT.as_bytes(),
-        b"/Hnon",
-        &vk_bytes,
+    let b = binding_factor::<C>(
+        &pubkeys.verifying_key,
         &encode_signer_set(&ids),
         &signing_package.message,
         &commitments_bytes,
-    ]);
+    );
 
     let R = D + E * b;
 
     let c = C::challenge(&pubkeys.verifying_key, &R, &signing_package.message);
 
-    let lambda_i = lagrange::<C>(key_package.identifier, &ids);
+    let lambda_i = lagrange::<C>(i, &ids);
 
-    let blind = key_package.blinding_scalar(&ids, &commitments_bytes, &signing_package.message);
+    let blind = key_package.blinding_scalar(&ids, &commitments_bytes, &signing_package.message)?;
 
     let nonce = signer_nonces.d + b * signer_nonces.e;
     let z_rest = c * lambda_i * key_package.signing_share + blind;
-    SignatureShare::new(key_package.identifier, R, nonce, z_rest)
+    Ok(SignatureShare::new(i, R, nonce, z_rest))
 }
 
 pub fn aggregate<C: Ciphersuite>(
     signing_package: &SigningPackage<C>,
     signature_shares: &BTreeMap<Identifier, SignatureShare<C>>,
-) -> Signature<C> {
-    assert_eq!(
-        signing_package.signing_commitments.len(),
-        signature_shares.len()
-    );
+) -> Result<Signature<C>> {
+    let expected = signing_package.signing_commitments.len();
+    let got = signature_shares.len();
+    if expected != got {
+        return Err(Error::ShareCountMismatch { expected, got });
+    }
 
     let mut z = C::Scalar::ZERO;
     let mut R_opt = None;
@@ -148,17 +152,17 @@ pub fn aggregate<C: Ciphersuite>(
     for share in signature_shares.values() {
         z += share.z;
 
-        if let Some(R) = R_opt {
-            assert_eq!(R, share.R);
-        } else {
-            R_opt = Some(share.R);
+        match R_opt {
+            // Every share must carry the same aggregate nonce R; a disagreement
+            // is an adversarial or malformed share, not a reason to crash.
+            Some(R) if R != share.R => return Err(Error::InconsistentAggregateNonce),
+            Some(_) => {}
+            None => R_opt = Some(share.R),
         }
     }
 
-    Signature {
-        R: R_opt.expect("missing signature shares"),
-        z,
-    }
+    let R = R_opt.ok_or(Error::NoSignatureShares)?;
+    Ok(Signature { R, z })
 }
 
 impl<C: Ciphersuite> KeyPackage<C> {
@@ -167,16 +171,11 @@ impl<C: Ciphersuite> KeyPackage<C> {
         ids: &[Identifier],
         commitments_bytes: &[u8],
         msg: &[u8; 32],
-    ) -> C::Scalar {
+    ) -> Result<C::Scalar> {
         let signer_set_bytes = encode_signer_set(ids);
 
-        // Hash the constant prefix once; k_ij is appended last per peer.
-        let mut base = C::Hasher::new();
-        base.update(C::CONTEXT.as_bytes());
-        base.update(b"/Hs");
-        base.update(commitments_bytes);
-        base.update(msg);
-        base.update(&signer_set_bytes);
+        // Shared prefix hashed once; k_ij is appended last per peer.
+        let base = blinding_base::<C>(commitments_bytes, msg, &signer_set_bytes);
 
         let mut blind = C::Scalar::ZERO;
 
@@ -185,7 +184,10 @@ impl<C: Ciphersuite> KeyPackage<C> {
                 continue;
             }
 
-            let k_ij = self.pairwise_keys.get(j).expect("missing pairwise key");
+            let k_ij = self
+                .pairwise_keys
+                .get(j)
+                .ok_or(Error::MissingPairwiseKey(*j))?;
             let B_ij = base.clone().finish_with(k_ij);
 
             if self.identifier > *j {
@@ -195,6 +197,6 @@ impl<C: Ciphersuite> KeyPackage<C> {
             }
         }
 
-        blind
+        Ok(blind)
     }
 }
