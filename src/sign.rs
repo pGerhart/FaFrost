@@ -38,6 +38,7 @@ pub struct SigningCommitments<C: Ciphersuite> {
 
 #[derive(Clone)]
 pub struct SigningPackage<C: Ciphersuite> {
+    /// The 32-byte message to sign; longer payloads are pre-hashed to a digest.
     pub message: [u8; 32],
     pub signing_commitments: BTreeMap<Identifier, SigningCommitments<C>>,
     pub partial_verification_keys: BTreeMap<Identifier, PartialVerificationKey<C>>,

@@ -600,6 +600,13 @@ fn proof_challenge<C: Ciphersuite>(
     transcript.append_message(b"z", &scalar_bytes::<C>(&signature_share.z));
     transcript.append_message(b"R", &C::point_bytes(&signature_share.R));
     transcript.append_message(b"vk", &C::point_bytes(&pubkeys.verifying_key));
+    transcript.append_message(b"pedersen_h", &C::point_bytes(&pubkeys.pedersen_h));
+    if let Some(vki) = pubkeys
+        .partial_verification_keys
+        .get(&signature_share.identifier)
+    {
+        transcript.append_message(b"vk_i", &C::point_bytes(&vki.signing_share_commitment));
+    }
 
     transcript.append_message(
         b"commitments",

@@ -66,6 +66,13 @@
 //! assert!(verify(&signature, &message, &pubkeys));
 //! ```
 //!
+//! ## Wire format and domain separation
+//!
+//! The encodings in [`wire`] and the domain-separated hash inputs (tags `/Hsig`,
+//! `/Hnon`, `/Hs`, `/HIA`, `/Hvk` under each ciphersuite `CONTEXT`) are normative
+//! for this reference: a conforming reimplementation must reproduce them to
+//! interoperate, and the pinned vectors in `tests/vectors.rs` guard them.
+//!
 //! ## Side channels
 //!
 //! Secret-dependent arithmetic runs through the constant-time field and group
