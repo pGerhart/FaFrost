@@ -58,7 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let marker = Builder::new()
         .push_opcode(opcodes::all::OP_RETURN)
-        .push_slice(b"FaFROST demo")
+        .push_slice(b"FaFrost demo")
         .into_script();
 
     let send_value = amount_sat

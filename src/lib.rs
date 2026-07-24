@@ -1,6 +1,6 @@
-//! # FaFROST — fully adaptive FROST threshold Schnorr signatures
+//! # FaFrost — fully adaptive Frost threshold Schnorr signatures
 //!
-//! A curve-agnostic reference implementation of FaFROST, a two-round threshold
+//! A curve-agnostic reference implementation of FaFrost, a two-round threshold
 //! Schnorr signature scheme with fully adaptive security under AOMDL and an
 //! identifiable-abort extension. The protocol logic is generic over a
 //! [`Ciphersuite`]; three are provided:
@@ -18,12 +18,60 @@
 //! Functions that consume data from a coordinator or from other (possibly
 //! malicious) signers return [`Result`] on malformed input; see [`error`].
 //!
+//! ## Example
+//!
+//! A full 2-of-3 signing session over the Ed25519 ciphersuite:
+//!
+//! ```
+//! use std::collections::BTreeMap;
+//!
+//! use fafrost::keygen::generate_with_dealer;
+//! use fafrost::sign::{SigningPackage, aggregate, commit, sign};
+//! use fafrost::verify::verify;
+//! use fafrost::Ed25519;
+//! use rand::rngs::SysRng;
+//! use rand_core::UnwrapErr;
+//!
+//! let mut rng = UnwrapErr(SysRng);
+//! let message = [0x24u8; 32];
+//!
+//! // Dealer produces 2-of-3 key shares.
+//! let (shares, pubkeys) = generate_with_dealer::<Ed25519, _>(3, 2, &mut rng);
+//!
+//! // Round 1: signers {1, 2} each publish a nonce commitment.
+//! let signers = [1u16, 2u16];
+//! let mut nonces = BTreeMap::new();
+//! let mut commitments = BTreeMap::new();
+//! for &id in &signers {
+//!     let (nonce, commitment) = commit::<Ed25519, _>(&mut rng);
+//!     nonces.insert(id, nonce);
+//!     commitments.insert(id, commitment);
+//! }
+//!
+//! let package = SigningPackage {
+//!     message,
+//!     signing_commitments: commitments,
+//!     partial_verification_keys: pubkeys.partial_verification_keys.clone(),
+//! };
+//!
+//! // Round 2: each signer produces a signature share.
+//! let mut signature_shares = BTreeMap::new();
+//! for &id in &signers {
+//!     let share = sign(&package, &nonces[&id], &shares[&id], &pubkeys).unwrap();
+//!     signature_shares.insert(id, share);
+//! }
+//!
+//! // The coordinator aggregates; the signature verifies under the group key.
+//! let signature = aggregate(&package, &signature_shares).unwrap();
+//! assert!(verify(&signature, &message, &pubkeys));
+//! ```
+//!
 //! ## Side channels
 //!
 //! Secret-dependent arithmetic runs through the constant-time field and group
 //! operations of `k256` and `curve25519-dalek`. Every value the code branches on
-//! or indexes with — signer identifiers, the signing set `S`, message lengths —
-//! is public protocol data, so control flow does not depend on secret key
+//! or indexes with (signer identifiers, the signing set `S`, message lengths) is
+//! public protocol data, so control flow does not depend on secret key
 //! material or nonces. Secret-holding types ([`keygen::KeyPackage`],
 //! [`sign::SigningNonces`], [`keygen::StoredKey`]) zeroize on drop. The
 //! `decide` adjudicator and the wire parsers are the only places that branch on
@@ -37,9 +85,10 @@ pub mod error;
 pub mod ia;
 pub mod keygen;
 pub mod sign;
-pub mod utils;
 pub mod verify;
 pub mod wire;
+
+mod utils;
 
 pub use ciphersuite::ed25519::Ed25519;
 pub use ciphersuite::secp256k1::{Secp256k1Bip340, Secp256k1Plain};

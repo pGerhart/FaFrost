@@ -8,6 +8,8 @@
 //! [`Signature`] encoding here is the curve-agnostic `R \Vert z`.
 #![allow(non_snake_case)]
 
+use core::fmt;
+use std::collections::BTreeMap;
 use std::vec::Vec;
 
 use ff::PrimeField;
@@ -17,6 +19,21 @@ use crate::ciphersuite::Ciphersuite;
 use crate::error::{Error, Result};
 use crate::keygen::Identifier;
 use crate::sign::{Signature, SignatureShare, SigningCommitments};
+
+/// Canonical byte encoding of the round-1 commitment map, `id \Vert D \Vert E`
+/// per signer in identifier order. Used as a hashing input for the binding
+/// factor and IA transcripts, and by the benchmarks.
+pub fn encode_commitments<C: Ciphersuite>(
+    commitments: &BTreeMap<Identifier, SigningCommitments<C>>,
+) -> Vec<u8> {
+    let mut out = Vec::new();
+    for (id, c) in commitments {
+        out.extend_from_slice(&id.to_be_bytes());
+        out.extend_from_slice(&C::point_bytes(&c.D));
+        out.extend_from_slice(&C::point_bytes(&c.E));
+    }
+    out
+}
 
 /// Canonical serialized length of a group element for this ciphersuite.
 pub fn point_len<C: Ciphersuite>() -> usize {
@@ -126,5 +143,25 @@ impl<C: Ciphersuite> Signature<C> {
         let R = point_from_bytes::<C>(&bytes[..plen]).ok_or(Error::MalformedEncoding)?;
         let z = scalar_from_bytes::<C>(&bytes[plen..]).ok_or(Error::MalformedEncoding)?;
         Ok(Self { R, z })
+    }
+}
+
+// `Debug` prints the hex of the wire encoding. These values are public protocol
+// data, not secrets.
+impl<C: Ciphersuite> fmt::Debug for SigningCommitments<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SigningCommitments({})", hex::encode(self.to_bytes()))
+    }
+}
+
+impl<C: Ciphersuite> fmt::Debug for SignatureShare<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "SignatureShare({})", hex::encode(self.to_bytes()))
+    }
+}
+
+impl<C: Ciphersuite> fmt::Debug for Signature<C> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Signature({})", hex::encode(self.to_bytes()))
     }
 }

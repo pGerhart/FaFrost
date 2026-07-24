@@ -1,3 +1,4 @@
+//! Idealized dealer-based key generation.
 #![allow(non_snake_case)]
 
 use crate::ciphersuite::Ciphersuite;
@@ -190,7 +191,7 @@ pub fn write_key_yaml<C: Ciphersuite, P: AsRef<Path>>(
         verifying_key_hex: hex::encode(C::point_bytes(&verifying_key)),
     };
 
-    let yaml = serde_yaml::to_string(&stored_key)?;
+    let yaml = serde_yaml_ng::to_string(&stored_key)?;
     fs::write(path, yaml)?;
     Ok(stored_key)
 }
@@ -199,7 +200,7 @@ pub fn read_key_yaml<C: Ciphersuite, P: AsRef<Path>>(
     path: P,
 ) -> Result<StoredKey, Box<dyn std::error::Error>> {
     let yaml = fs::read_to_string(path)?;
-    let stored_key: StoredKey = serde_yaml::from_str(&yaml)?;
+    let stored_key: StoredKey = serde_yaml_ng::from_str(&yaml)?;
     validate_stored_key::<C>(&stored_key)?;
     Ok(stored_key)
 }

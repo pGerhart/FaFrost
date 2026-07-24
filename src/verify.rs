@@ -1,3 +1,5 @@
+//! Verification of an aggregate signature against the group public key.
+
 use crate::ciphersuite::Ciphersuite;
 use crate::keygen::PublicKeyPackage;
 use crate::sign::Signature;

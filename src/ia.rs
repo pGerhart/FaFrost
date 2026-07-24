@@ -1,3 +1,4 @@
+//! Identifiable-abort protocol: the two IA rounds and the `decide` algorithm.
 #![allow(non_snake_case)]
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -14,10 +15,10 @@ use crate::error::{Error, Result};
 use crate::keygen::{Identifier, KeyPackage, PublicKeyPackage};
 use crate::sign::{SignatureShare, SigningPackage};
 use crate::utils::{
-    binding_factor, blinding_base, blinding_randomizer, delta, encode_commitments,
-    encode_signer_set, hash_pairwise_key_commitment, lagrange, pedersen_commit,
+    binding_factor, blinding_base, blinding_randomizer, delta, encode_signer_set,
+    hash_pairwise_key_commitment, lagrange, pedersen_commit,
 };
-use crate::wire::scalar_bytes;
+use crate::wire::{encode_commitments, scalar_bytes};
 
 #[derive(Clone)]
 pub struct IA1Message<C: Ciphersuite> {
@@ -593,7 +594,7 @@ fn proof_challenge<C: Ciphersuite>(
     b: C::Scalar,
     c: C::Scalar,
 ) -> C::Scalar {
-    let mut transcript = Transcript::new(b"FaFROST/IAProof");
+    let mut transcript = Transcript::new(b"FaFrost/IAProof");
     transcript.append_message(b"ctx", C::CONTEXT.as_bytes());
 
     transcript.append_message(b"signer", &signature_share.identifier.to_be_bytes());

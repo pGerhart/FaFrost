@@ -1,10 +1,10 @@
+//! Two-round signing: nonce commitment, signature shares, and aggregation.
 #![allow(non_snake_case)]
 
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
 use crate::error::{Error, Result};
-use crate::utils::{
-    binding_factor, blinding_base, encode_commitments, encode_signer_set, lagrange,
-};
+use crate::utils::{binding_factor, blinding_base, encode_signer_set, lagrange};
+use crate::wire::encode_commitments;
 use std::collections::BTreeMap;
 use std::vec::Vec;
 

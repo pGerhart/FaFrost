@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
 authors = ["Paul Gerhart"]
-description = "Fully adaptive FROST: a two-round threshold Schnorr signature scheme with identifiable aborts"
+description = "FaFrost: Fully Adaptive Frost with Identifiable Aborts from AOMDL"
 repository = "https://github.com/pGerhart/FaFrost"
 keywords = ["threshold", "schnorr", "signature", "frost", "cryptography"]
 categories = ["cryptography"]
@@ -29,7 +29,7 @@ ff = "0.14"
 merlin = "3"
 zeroize = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-serde_yaml = "0.9"
+serde_yaml_ng = "0.10"
 hex = "0.4"
 
 # Only the Bitcoin key-spend demos need these; both are CC0-1.0, kept out of the
@@ -46,6 +46,10 @@ criterion = { version = "0.5", features = ["html_reports"] }
 
 # RFC 8032 verifier.
 ed25519-dalek = "3"
+
+# Available to the doctest / integration tests (also normal dependencies).
+rand = { version = "0.10", features = ["chacha"] }
+rand_core = "0.10"
 
 [[bin]]
 name = "generateaddress"

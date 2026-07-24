@@ -31,8 +31,8 @@ impl ScalarHasher for Sha256ScalarHasher {
 
 fn secp_pedersen_generator() -> ProjectivePoint {
     let h = Secp256k1::hash_from_bytes(
-        &[b"FaFROST/secp256k1/SHA256/PedersenH"],
-        &[b"FaFROST/secp256k1/SHA256"],
+        &[b"FaFrost/secp256k1/SHA256/PedersenH"],
+        &[b"FaFrost/secp256k1/SHA256"],
     )
     .expect("hash to curve failed");
 
@@ -58,8 +58,8 @@ impl Ciphersuite for Secp256k1Plain {
     type Point = ProjectivePoint;
     type Hasher = Sha256ScalarHasher;
 
-    const CONTEXT: &'static str = "FaFROST/secp256k1/SHA256";
-    const SCHEME_ID: &'static str = "FaFROST-secp256k1-plain";
+    const CONTEXT: &'static str = "FaFrost/secp256k1/SHA256";
+    const SCHEME_ID: &'static str = "FaFrost-secp256k1-plain";
 
     fn hash_commitment(parts: &[&[u8]]) -> [u8; 32] {
         secp_hash_commitment(parts)
@@ -86,8 +86,8 @@ impl Ciphersuite for Secp256k1Bip340 {
 
     // Internal hashes (binding factor, blinding, IA) share the secp256k1 context;
     // only the external `challenge` and the wire encoding follow BIP-340.
-    const CONTEXT: &'static str = "FaFROST/secp256k1/SHA256";
-    const SCHEME_ID: &'static str = "FaFROST-secp256k1-bip340";
+    const CONTEXT: &'static str = "FaFrost/secp256k1/SHA256";
+    const SCHEME_ID: &'static str = "FaFrost-secp256k1-bip340";
 
     fn hash_commitment(parts: &[&[u8]]) -> [u8; 32] {
         secp_hash_commitment(parts)

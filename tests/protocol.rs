@@ -152,7 +152,7 @@ fn ed25519_interop_with_dalek() {
     let dalek_sig = DalekSig::from_bytes(&sig_bytes);
     assert!(
         vk.verify_strict(&message, &dalek_sig).is_ok(),
-        "ed25519-dalek verify_strict must accept the FaFROST signature"
+        "ed25519-dalek verify_strict must accept the FaFrost signature"
     );
     assert!(vk.verify(&message, &dalek_sig).is_ok());
 }

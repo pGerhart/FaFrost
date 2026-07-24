@@ -40,7 +40,7 @@ impl ScalarHasher for Sha512ScalarHasher {
 fn ed25519_pedersen_generator() -> EdwardsPoint {
     for ctr in 0u32.. {
         let mut h = Sha512::new();
-        h.update(b"FaFROST/ed25519/SHA512/PedersenH");
+        h.update(b"FaFrost/ed25519/SHA512/PedersenH");
         h.update(ctr.to_le_bytes());
         let digest = h.finalize();
 
@@ -75,8 +75,8 @@ impl Ciphersuite for Ed25519 {
     type Point = EdwardsPoint;
     type Hasher = Sha512ScalarHasher;
 
-    const CONTEXT: &'static str = "FaFROST/ed25519/SHA512";
-    const SCHEME_ID: &'static str = "FaFROST-ed25519";
+    const CONTEXT: &'static str = "FaFrost/ed25519/SHA512";
+    const SCHEME_ID: &'static str = "FaFrost-ed25519";
 
     fn hash_commitment(parts: &[&[u8]]) -> [u8; 32] {
         let mut h = Sha512::new();

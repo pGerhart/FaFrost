@@ -1,11 +1,9 @@
-use std::collections::BTreeMap;
 use std::vec::Vec;
 
 use ff::Field;
 
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
 use crate::keygen::Identifier;
-use crate::sign::SigningCommitments;
 
 pub(crate) fn lagrange<C: Ciphersuite>(i: Identifier, signer_set: &[Identifier]) -> C::Scalar {
     let i_s = C::Scalar::from(i as u64);
@@ -84,20 +82,6 @@ pub(crate) fn encode_signer_set(ids: &[Identifier]) -> Vec<u8> {
 
     for id in ids {
         out.extend_from_slice(&id.to_be_bytes());
-    }
-
-    out
-}
-
-pub fn encode_commitments<C: Ciphersuite>(
-    commitments: &BTreeMap<Identifier, SigningCommitments<C>>,
-) -> Vec<u8> {
-    let mut out = Vec::new();
-
-    for (id, c) in commitments {
-        out.extend_from_slice(&id.to_be_bytes());
-        out.extend_from_slice(&C::point_bytes(&c.D));
-        out.extend_from_slice(&C::point_bytes(&c.E));
     }
 
     out
