@@ -21,8 +21,9 @@ use std::collections::BTreeMap;
 use std::str::FromStr;
 
 use k256::elliptic_curve::ops::Reduce;
-use k256::{FieldBytes, ProjectivePoint, Scalar, U256};
-use rand_core::OsRng;
+use k256::{FieldBytes, ProjectivePoint, Scalar};
+use rand::rngs::SysRng;
+use rand_core::UnwrapErr;
 use sha2::{Digest, Sha256};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let fee_sat = arg(5, "800").parse::<u64>()?;
 
     let network = Network::Testnet;
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
 
     let (shares, pubkeys) =
         generate_with_dealer_from_key_yaml::<Secp256k1Bip340, _, _>(&key_file, &mut rng)?;
@@ -186,7 +187,7 @@ fn arg(n: usize, default: &str) -> String {
 fn taproot_tweak(internal_key: &ProjectivePoint) -> (Scalar, ProjectivePoint) {
     let x = x_only_bytes(internal_key);
     let tweak_hash = tagged_hash(b"TapTweak", &x);
-    let tweak = <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(&tweak_hash));
+    let tweak = <Scalar as Reduce<FieldBytes>>::reduce(&FieldBytes::from(tweak_hash));
 
     let q_raw = *internal_key + ProjectivePoint::GENERATOR * tweak;
     let q_even = if has_odd_y(&q_raw) { -q_raw } else { q_raw };

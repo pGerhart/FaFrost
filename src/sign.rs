@@ -8,7 +8,7 @@ use std::vec::Vec;
 use ff::Field;
 use group::Group;
 
-use rand_core::{CryptoRng, RngCore};
+use rand_core::CryptoRng;
 
 use crate::keygen::{Identifier, KeyPackage, PartialVerificationKey, PublicKeyPackage};
 
@@ -55,7 +55,7 @@ pub struct Signature<C: Ciphersuite> {
     pub z: C::Scalar,
 }
 
-pub fn commit<C: Ciphersuite, R: RngCore + CryptoRng>(
+pub fn commit<C: Ciphersuite, R: CryptoRng>(
     rng: &mut R,
 ) -> (SigningNonces<C>, SigningCommitments<C>) {
     let d = C::Scalar::random(&mut *rng);

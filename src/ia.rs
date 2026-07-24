@@ -5,7 +5,7 @@ use std::vec::Vec;
 
 use ff::Field;
 use group::Group;
-use rand_core::{CryptoRng, RngCore};
+use rand_core::CryptoRng;
 
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
 use crate::keygen::{Identifier, KeyPackage, PublicKeyPackage};
@@ -40,7 +40,7 @@ pub struct WellformedProof<C: Ciphersuite> {
     pub z_blind_blinding: BTreeMap<Identifier, C::Scalar>,
 }
 
-pub fn ia1<C: Ciphersuite, R: RngCore + CryptoRng>(
+pub fn ia1<C: Ciphersuite, R: CryptoRng>(
     signing_package: &SigningPackage<C>,
     signature_share: &SignatureShare<C>,
     key_package: &KeyPackage<C>,
@@ -301,7 +301,7 @@ pub fn decide<C: Ciphersuite>(
     malicious
 }
 
-fn prove_wellformed<C: Ciphersuite, R: RngCore + CryptoRng>(
+fn prove_wellformed<C: Ciphersuite, R: CryptoRng>(
     signing_package: &SigningPackage<C>,
     signature_share: &SignatureShare<C>,
     key_package: &KeyPackage<C>,

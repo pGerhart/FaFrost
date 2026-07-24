@@ -1,9 +1,10 @@
 use fafrost::Secp256k1Bip340;
 use fafrost::keygen::generate_with_dealer_and_write_key_yaml;
-use rand_core::OsRng;
+use rand::rngs::SysRng;
+use rand_core::UnwrapErr;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
 
     let path = std::env::args()
         .nth(1)

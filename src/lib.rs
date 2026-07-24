@@ -18,17 +18,16 @@ pub use sign::*;
 pub use utils::*;
 pub use verify::*;
 
-// Backend-specific serialisers/verifiers live in their modules to avoid name
-// clashes (both `bip340` and `ed25519` expose a `signature_to_bytes`):
-//   fafrost::bip340::{signature_to_bytes, bip340_verify_bytes, xonly_pubkey, ..}
-//   fafrost::ed25519::{signature_to_bytes, ed25519_verify_bytes, verifying_key_bytes}
+// The serialisers stay unexported: both `bip340` and `ed25519` define a
+// `signature_to_bytes`, so they are reached through their module path.
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;
 
     use ff::Field;
-    use rand_core::OsRng;
+    use rand::rngs::SysRng;
+    use rand_core::UnwrapErr;
 
     use crate::ciphersuite::Ciphersuite;
     use crate::ed25519::Ed25519;
@@ -38,8 +37,7 @@ mod tests {
     use crate::sign::{aggregate, commit, sign, SignatureShare, SigningPackage, Signature};
     use crate::verify::verify;
 
-    /// One full signing session, retaining every intermediate needed by the
-    /// signing, tampering and identifiable-abort tests.
+    /// One signing session, retaining the intermediates the tests reach into.
     struct Session<C: Ciphersuite> {
         shares: BTreeMap<u16, KeyPackage<C>>,
         pubkeys: PublicKeyPackage<C>,
@@ -48,7 +46,7 @@ mod tests {
     }
 
     fn run<C: Ciphersuite>(max: u16, min: u16, signer_ids: &[u16], message: [u8; 32]) -> Session<C> {
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
 
         let (shares, pubkeys) = generate_with_dealer::<C, _>(max, min, &mut rng);
 
@@ -106,7 +104,7 @@ mod tests {
     fn ia_identifies_tampered_share<C: Ciphersuite>() {
         use std::collections::BTreeSet;
 
-        let mut rng = OsRng;
+        let mut rng = UnwrapErr(SysRng);
         let message = [99u8; 32];
         let mut s = run::<C>(3, 2, &[1, 2], message);
 
@@ -146,7 +144,6 @@ mod tests {
         assert_eq!(malicious, expected);
     }
 
-    // --- generic Schnorr over secp256k1 -------------------------------------
     #[test]
     fn plain_two_of_three() {
         signs_and_verifies::<Secp256k1Plain>(3, 2, &[1, 3]);
@@ -164,7 +161,6 @@ mod tests {
         ia_identifies_tampered_share::<Secp256k1Plain>();
     }
 
-    // --- Bitcoin / BIP-340 --------------------------------------------------
     #[test]
     fn bip340_two_of_three() {
         signs_and_verifies::<Secp256k1Bip340>(3, 2, &[1, 3]);
@@ -182,7 +178,6 @@ mod tests {
         ia_identifies_tampered_share::<Secp256k1Bip340>();
     }
 
-    // --- Ed25519 ------------------------------------------------------------
     #[test]
     fn ed25519_two_of_three() {
         signs_and_verifies::<Ed25519>(3, 2, &[1, 3]);
@@ -200,9 +195,8 @@ mod tests {
         ia_identifies_tampered_share::<Ed25519>();
     }
 
-    /// The convincing artifact: a FaFROST threshold signature under the Ed25519
-    /// ciphersuite is accepted by the independent `ed25519-dalek` verifier,
-    /// including the strict RFC 8032 path (`verify_strict`).
+    /// An Ed25519-ciphersuite threshold signature must be accepted by the
+    /// independent `ed25519-dalek` verifier, `verify_strict` included.
     #[test]
     fn ed25519_interop_with_dalek() {
         use ed25519_dalek::{Signature as DalekSig, Verifier, VerifyingKey};
@@ -211,18 +205,15 @@ mod tests {
         let s = run::<Ed25519>(3, 2, &[1, 2], message);
         let sig: Signature<Ed25519> = aggregate(&s.signing_package, &s.signature_shares);
 
-        // internal verifier
         assert!(verify(&sig, &message, &s.pubkeys));
 
         let vk_bytes = crate::ed25519::verifying_key_bytes(&s.pubkeys);
         let sig_bytes = crate::ed25519::signature_to_bytes(&sig);
 
-        // our own standalone RFC 8032 verifier
         assert!(crate::ed25519::ed25519_verify_bytes(
             &sig_bytes, &message, &vk_bytes
         ));
 
-        // independent implementation: ed25519-dalek, strict and non-strict
         let vk = VerifyingKey::from_bytes(&vk_bytes).expect("valid Ed25519 public key");
         let dalek_sig = DalekSig::from_bytes(&sig_bytes);
         assert!(

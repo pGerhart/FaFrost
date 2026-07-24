@@ -6,7 +6,7 @@ use crate::utils::{
 };
 use ff::Field;
 use group::Group;
-use rand_core::{CryptoRng, RngCore};
+use rand_core::CryptoRng;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fs;
@@ -47,7 +47,7 @@ pub struct PublicKeyPackage<C: Ciphersuite> {
     pub partial_verification_keys: BTreeMap<Identifier, PartialVerificationKey<C>>,
 }
 
-pub fn generate_with_dealer<C: Ciphersuite, R: RngCore + CryptoRng>(
+pub fn generate_with_dealer<C: Ciphersuite, R: CryptoRng>(
     max_signers: u16,
     min_signers: u16,
     rng: &mut R,
@@ -56,7 +56,7 @@ pub fn generate_with_dealer<C: Ciphersuite, R: RngCore + CryptoRng>(
     generate_with_dealer_from_secret::<C, R>(sk, max_signers, min_signers, rng)
 }
 
-pub fn generate_with_dealer_from_secret<C: Ciphersuite, R: RngCore + CryptoRng>(
+pub fn generate_with_dealer_from_secret<C: Ciphersuite, R: CryptoRng>(
     secret_key: C::Scalar,
     max_signers: u16,
     min_signers: u16,
@@ -178,7 +178,7 @@ pub fn read_key_yaml<C: Ciphersuite, P: AsRef<Path>>(
     Ok(stored_key)
 }
 
-pub fn generate_with_dealer_from_key_yaml<C: Ciphersuite, P: AsRef<Path>, R: RngCore + CryptoRng>(
+pub fn generate_with_dealer_from_key_yaml<C: Ciphersuite, P: AsRef<Path>, R: CryptoRng>(
     path: P,
     rng: &mut R,
 ) -> Result<(BTreeMap<Identifier, KeyPackage<C>>, PublicKeyPackage<C>), Box<dyn std::error::Error>> {
@@ -246,7 +246,7 @@ pub fn validate_stored_key<C: Ciphersuite>(
 pub fn generate_with_dealer_and_write_key_yaml<
     C: Ciphersuite,
     P: AsRef<Path>,
-    R: RngCore + CryptoRng,
+    R: CryptoRng,
 >(
     path: P,
     max_signers: u16,

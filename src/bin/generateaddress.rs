@@ -1,7 +1,8 @@
 use bitcoin::{Address, Network, XOnlyPublicKey};
 use fafrost::Secp256k1Bip340;
 use fafrost::keygen::{generate_with_dealer_from_key_yaml, read_key_yaml};
-use rand_core::OsRng;
+use rand::rngs::SysRng;
+use rand_core::UnwrapErr;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()
@@ -18,7 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // read_key_yaml validates the scheme matches the Secp256k1Bip340 ciphersuite.
     let stored_key = read_key_yaml::<Secp256k1Bip340, _>(&path)?;
 
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
     let (_shares, pubkeys) =
         generate_with_dealer_from_key_yaml::<Secp256k1Bip340, _, _>(&path, &mut rng)?;
 

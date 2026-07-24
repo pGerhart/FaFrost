@@ -5,20 +5,21 @@ edition = "2024"
 
 [dependencies]
 bitcoin = "0.32"
-rand = "0.8"
-rand_core = { version = "0.6", features = ["getrandom"] }
-sha2 = "0.10"
-k256 = { version = "0.13", default-features = false, features = [
+rand = "0.10"
+rand_core = "0.10"
+sha2 = "0.11"
+k256 = { version = "0.14", default-features = false, features = [
     "arithmetic",
     "hash2curve",
+    "group-digest",
 ] }
-curve25519-dalek = { version = "4", features = [
+curve25519-dalek = { version = "5", features = [
     "group",
     "rand_core",
     "digest",
 ] }
-group = "0.13"
-ff = "0.13"
+group = "0.14"
+ff = "0.14"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 hex = "0.4"
@@ -28,7 +29,7 @@ bitcoin_hashes = "0.14"
 criterion = { version = "0.5", features = ["html_reports"] }
 
 # RFC 8032 verifier.
-ed25519-dalek = "2"
+ed25519-dalek = "3"
 
 [[bench]]
 name = "fafrost"

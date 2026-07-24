@@ -1,24 +1,14 @@
-//! secp256k1 ciphersuites (backed by `k256`).
-//!
-//!   - [`Secp256k1Plain`]  – generic Schnorr with a domain-separated `SHA-256`
-//!     challenge and compressed-point encoding.
-//!   - [`Secp256k1Bip340`] – Bitcoin/BIP-340: even-y normalisation, x-only
-//!     encoding and the `BIP0340/challenge` tagged hash. Aggregate signatures are
-//!     valid Taproot key-spend signatures.
+//! secp256k1 ciphersuites, backed by `k256`.
 #![allow(non_snake_case)]
 
-use k256::elliptic_curve::{
-    group::prime::PrimeCurveAffine,
-    hash2curve::{ExpandMsgXmd, GroupDigest},
-    ops::Reduce,
-};
-use k256::{FieldBytes, ProjectivePoint, Scalar, Secp256k1, U256};
+use k256::elliptic_curve::{group::CurveAffine, ops::Reduce};
+use k256::hash2curve::GroupDigest;
+use k256::{FieldBytes, ProjectivePoint, Scalar, Secp256k1};
 use sha2::{Digest, Sha256};
 
 use crate::bip340;
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
 
-/// `SHA-256` accumulator finalising to a secp256k1 scalar (reduce mod n).
 #[derive(Clone)]
 pub struct Sha256ScalarHasher(Sha256);
 
@@ -35,13 +25,12 @@ impl ScalarHasher for Sha256ScalarHasher {
 
     fn finish(self) -> Scalar {
         let bytes: [u8; 32] = self.0.finalize().into();
-        <Scalar as Reduce<U256>>::reduce_bytes(FieldBytes::from_slice(&bytes))
+        <Scalar as Reduce<FieldBytes>>::reduce(&FieldBytes::from(bytes))
     }
 }
 
-/// Independent Pedersen generator for secp256k1, via hash-to-curve.
 fn secp_pedersen_generator() -> ProjectivePoint {
-    let h = Secp256k1::hash_from_bytes::<ExpandMsgXmd<Sha256>>(
+    let h = Secp256k1::hash_from_bytes(
         &[b"FaFROST/secp256k1/SHA256/PedersenH"],
         &[b"FaFROST/secp256k1/SHA256"],
     )
@@ -52,7 +41,6 @@ fn secp_pedersen_generator() -> ProjectivePoint {
     h
 }
 
-/// Generic Schnorr over secp256k1 (non-Bitcoin).
 #[derive(Copy, Clone, Debug)]
 pub struct Secp256k1Plain;
 
@@ -75,7 +63,6 @@ impl Ciphersuite for Secp256k1Plain {
     }
 }
 
-/// Bitcoin/BIP-340 Taproot key-spend signatures over secp256k1.
 #[derive(Copy, Clone, Debug)]
 pub struct Secp256k1Bip340;
 

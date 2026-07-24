@@ -4,7 +4,8 @@ use fafrost::keygen::generate_with_dealer;
 use fafrost::sign::{SignatureShare, SigningPackage, aggregate, commit, sign};
 use fafrost::utils::encode_commitments;
 use fafrost::{Ciphersuite, Ed25519, Secp256k1Bip340};
-use rand_core::OsRng;
+use rand::rngs::SysRng;
+use rand_core::UnwrapErr;
 use std::collections::BTreeMap;
 
 const CONFIGS: &[(u16, u16)] = &[
@@ -39,7 +40,7 @@ struct IASetup<C: Ciphersuite> {
 }
 
 fn make_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> Setup<C> {
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
     let (shares, pubkeys) = generate_with_dealer::<C, _>(max_signers, min_signers, &mut rng);
 
     let signer_ids: Vec<Identifier> = (1..=min_signers).collect();
@@ -83,7 +84,7 @@ fn make_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> Setup<C> {
 }
 
 fn make_ia_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> IASetup<C> {
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
     let (shares, pubkeys) = generate_with_dealer::<C, _>(max_signers, min_signers, &mut rng);
 
     let signer_ids: Vec<Identifier> = (1..=min_signers).collect();
@@ -139,7 +140,7 @@ fn make_ia_setup<C: Ciphersuite>(min_signers: u16, max_signers: u16) -> IASetup<
 }
 
 fn bench_commit<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
     c.bench_function(&format!("commit/{curve}"), |b| {
         b.iter(|| commit::<C, _>(&mut rng))
     });
@@ -196,7 +197,7 @@ fn bench_blinding<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
 }
 
 fn bench_ia1<C: Ciphersuite>(c: &mut Criterion, curve: &str) {
-    let mut rng = OsRng;
+    let mut rng = UnwrapErr(SysRng);
     let mut group = c.benchmark_group("ia1");
 
     for &(min, max) in CONFIGS {
