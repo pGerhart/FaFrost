@@ -94,4 +94,4 @@ HTML reports go to `target/criterion/`; pinned results are in [`benches/bench_re
 
 ## Demo transaction
 
-A signature is only useful if existing systems accept it. To exercise FaFrost's Bitcoin compatibility in the strongest form, we used it to construct and broadcast a real Bitcoin testnet Taproot key-spend transaction: the live Bitcoin network accepts a FaFrost threshold signature as an ordinary single-key spend, even though no party ever holds the whole signing key. The full walkthrough (commands, the broadcast transaction, and on-chain screenshots) is in [`bitcoin-demo/README.md`](bitcoin-demo/README.md).
+To exercise FaFrost's Bitcoin compatibility, we used it to construct and broadcast a real Bitcoin testnet Taproot key-spend transaction: the live Bitcoin network accepts a FaFrost threshold signature as an ordinary single-key spend, even though no party ever holds the whole signing key. The full walkthrough (commands, the broadcast transaction, and on-chain screenshots) is in [`bitcoin-demo/README.md`](bitcoin-demo/README.md).

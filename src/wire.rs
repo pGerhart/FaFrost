@@ -146,8 +146,7 @@ impl<C: Ciphersuite> Signature<C> {
     }
 }
 
-// `Debug` prints the hex of the wire encoding. These values are public protocol
-// data, not secrets.
+// Hex of the wire encoding; these are public values, not secrets.
 impl<C: Ciphersuite> fmt::Debug for SigningCommitments<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "SigningCommitments({})", hex::encode(self.to_bytes()))

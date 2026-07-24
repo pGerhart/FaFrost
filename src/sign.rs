@@ -100,8 +100,7 @@ pub fn sign<C: Ciphersuite>(
         .get(&i)
         .ok_or(Error::UnknownSigner(i))?;
 
-    // The coordinator must have published this signer's own commitment `(D_i, E_i)`
-    // for exactly the nonce it holds; a mismatch means a wrong or tampered session.
+    // The published commitment must match this signer's own nonce.
     if signer_commitment.D != C::mul_generator(&signer_nonces.d)
         || signer_commitment.E != C::mul_generator(&signer_nonces.e)
     {
@@ -153,8 +152,7 @@ pub fn aggregate<C: Ciphersuite>(
         z += share.z;
 
         match R_opt {
-            // Every share must carry the same aggregate nonce R; a disagreement
-            // means an adversarial or malformed share.
+            // All shares must carry the same aggregate nonce R.
             Some(R) if R != share.R => return Err(Error::InconsistentAggregateNonce),
             Some(_) => {}
             None => R_opt = Some(share.R),

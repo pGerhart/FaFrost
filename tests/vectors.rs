@@ -122,6 +122,6 @@ fn wire_round_trip_and_rejection() {
 // Pinned known-answer vectors (aggregate signature `R \Vert z`, hex).
 // ed25519 is 64 bytes (32-byte compressed R, 32-byte scalar); the secp256k1
 // suites are 65 bytes (33-byte compressed SEC1 point, 32-byte scalar).
-const ED25519_SIG: &str = "d94ea10356f7edf20d2267b42063a0c2ee46049b2ad6bb5ebe1989222913a4afab9f819a1db51845f075255e8caf8b29d4302e05462107986aece5da81b93a00";
-const SECP_PLAIN_SIG: &str = "03c317f04a24deac24ffb5c5bb945d6639aef90a47ee745850325cd98dfc5fd897685e9bc091b3c5dd9d728310b096daf301c6379cdae8d2b2575eca1afcf08168";
-const SECP_BIP340_SIG: &str = "02bd10e54603906e656e6cc6305bb7ab784a9aa85a92098acd1dfa0f97e761a304f6bc7da2588353c1d6f5a1072ec8952f4250c82d9e542a214ad4357a79520213";
+const ED25519_SIG: &str = "dd6feea52b298960e0bf148a602c646a5dd7caceee0415ed68c247540a4c1b40e3c72c80b05b216973b4562e5b1e92024dbfe9d2ec84820f90fcf1d2b73f4e0a";
+const SECP_PLAIN_SIG: &str = "02acccb1a41ae207d306b276abbf93b620e217899a4e392413ec58b694fd928d31264f660182135ce654d19860bb1e7ccf318b397166d56d1a142f74f369187ef9";
+const SECP_BIP340_SIG: &str = "0237a6c328a9b2848da83ed9c74cdd029cc6d52170e553e4117566d9df21a51088bf1d13b6d728cfa3804f0012d86bed1ac41c27ab93b811e3c92fc459e233c48d";

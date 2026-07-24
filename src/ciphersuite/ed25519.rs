@@ -57,7 +57,7 @@ fn ed25519_pedersen_generator() -> EdwardsPoint {
     unreachable!("hash-to-curve must terminate")
 }
 
-/// `k = SHA512(R‖A‖M) mod L`, the pure Ed25519 challenge with empty `dom2`.
+/// `k = SHA512(R||A||M) mod L`, the pure Ed25519 challenge with empty `dom2`.
 fn rfc8032_challenge(r_enc: &[u8; 32], a_enc: &[u8; 32], msg: &[u8]) -> Scalar {
     let mut h = Sha512::new();
     h.update(r_enc);
@@ -108,7 +108,7 @@ pub fn verifying_key_bytes(pubkeys: &PublicKeyPackage<Ed25519>) -> [u8; 32] {
     pubkeys.verifying_key.compress().to_bytes()
 }
 
-/// 64-byte RFC 8032 wire format `compress(R) ‖ s`, with `s` little-endian.
+/// 64-byte RFC 8032 wire format `compress(R) || s`, with `s` little-endian.
 pub fn signature_to_bytes(sig: &Signature<Ed25519>) -> [u8; 64] {
     let r_enc = sig.R.compress().to_bytes();
     let s_enc = sig.z.to_bytes();

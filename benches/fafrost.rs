@@ -2,7 +2,7 @@ use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use fafrost::ia::{IA1Message, IA2Decision, decide, ia1, ia2};
 use fafrost::keygen::generate_with_dealer;
 use fafrost::sign::{SignatureShare, SigningPackage, aggregate, commit, sign};
-use fafrost::utils::encode_commitments;
+use fafrost::wire::encode_commitments;
 use fafrost::{Ciphersuite, Ed25519, Secp256k1Bip340};
 use rand::rngs::SysRng;
 use rand_core::UnwrapErr;

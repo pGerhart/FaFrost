@@ -299,9 +299,7 @@ pub fn decide<C: Ciphersuite>(
     malicious
 }
 
-// The parameters are the sigma-protocol inputs (statement, witness, blinding
-// openings); grouping them into a struct would only obscure the correspondence
-// to the relation R, so the argument list is kept explicit.
+// Sigma-protocol inputs, kept explicit rather than bundled.
 #[allow(clippy::too_many_arguments)]
 fn prove_wellformed<C: Ciphersuite, R: CryptoRng>(
     signing_package: &SigningPackage<C>,
@@ -406,8 +404,7 @@ fn prove_wellformed<C: Ciphersuite, R: CryptoRng>(
         z_blind_blinding,
     };
 
-    // The commitment randomness is a secret blind on the witness; wipe it once the
-    // responses are formed so it does not linger on the stack.
+    // Wipe the secret commitment randomness once the responses are formed.
     r_sk.zeroize();
     r_sk_blinding.zeroize();
     for r in r_blind.values_mut() {
@@ -450,7 +447,7 @@ fn verify_wellformed_proof<C: Ciphersuite>(
     let c = sig_challenge::<C>(signing_package, pubkeys);
     let lambda_i = lagrange::<C>(i, &ids);
 
-    // A = G*z - sign*(D_i + b*E_i)  (= G*(c·λi·sk_i + B_i^s) after nonces cancel).
+    // A = G*z - sign*(D_i + b*E_i)  (= G*(c*lambda_i*sk_i + B_i^s) after nonces cancel).
     // `sign` is +1 if the share kept its nonce and -1 if the ciphersuite negated
     // it during normalisation (BIP-340 odd-y aggregate R); a probe of ONE through
     // `normalize_share_r` recovers that sign without curve-specific branches.
@@ -580,8 +577,7 @@ fn sig_challenge<C: Ciphersuite>(
     C::challenge(&pubkeys.verifying_key, &R, &signing_package.message)
 }
 
-// Every argument is absorbed into the Fiat-Shamir transcript; the list mirrors
-// the transcript contents and is clearer kept flat than bundled.
+// Arguments mirror the Fiat-Shamir transcript contents, kept flat.
 #[allow(clippy::too_many_arguments)]
 fn proof_challenge<C: Ciphersuite>(
     signing_package: &SigningPackage<C>,

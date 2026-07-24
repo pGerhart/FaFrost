@@ -1,4 +1,4 @@
-//! # FaFrost — fully adaptive Frost threshold Schnorr signatures
+//! # FaFrost - fully adaptive Frost threshold Schnorr signatures
 //!
 //! A curve-agnostic reference implementation of FaFrost, a two-round threshold
 //! Schnorr signature scheme with fully adaptive security under AOMDL and an
@@ -103,9 +103,6 @@ pub use ia::*;
 pub use keygen::*;
 pub use sign::*;
 pub use verify::verify;
-
-// `utils` holds internal protocol helpers; its one public item (`encode_commitments`,
-// used by the benches) stays reachable at `fafrost::utils::` rather than the root.
 
 // The serialisers stay unexported at the crate root: both `bip340` and `ed25519`
 // define a `signature_to_bytes`, so they are reached through their module path.

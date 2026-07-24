@@ -133,8 +133,7 @@ pub fn generate_with_dealer_from_secret<C: Ciphersuite, R: CryptoRng>(
         );
     }
 
-    // Wipe the polynomial (its constant term is the master secret) before it
-    // goes out of scope.
+    // Wipe the polynomial; its constant term is the master secret.
     coeffs.zeroize();
 
     for i in 1..=max_signers {
