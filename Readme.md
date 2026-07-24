@@ -1,5 +1,7 @@
 # FaFrost — Fully Adaptive Frost with Identifiable Aborts from AOMDL
 
+[![CI](https://github.com/pGerhart/FaFrost/actions/workflows/ci.yml/badge.svg)](https://github.com/pGerhart/FaFrost/actions/workflows/ci.yml)
+
 A reference implementation of **FaFrost**, a two-round threshold Schnorr signature scheme with **fully adaptive security under AOMDL** and an **identifiable-abort** extension, from the paper:
 
 > **Fully Adaptive Frost with Identifiable Aborts from AOMDL**  
