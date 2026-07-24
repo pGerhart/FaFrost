@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
 
 use crate::ciphersuite::Ciphersuite;
-use crate::utils::{hash_pairwise_key_commitment, pedersen_commit, scalar_from_hex, scalar_to_hex};
+use crate::utils::{hash_pairwise_key_commitment, pedersen_commit};
+use crate::wire::{scalar_from_hex, scalar_to_hex};
 use ff::Field;
 use rand_core::CryptoRng;
 use serde::{Deserialize, Serialize};
@@ -130,6 +131,10 @@ pub fn generate_with_dealer_from_secret<C: Ciphersuite, R: CryptoRng>(
             },
         );
     }
+
+    // The polynomial (including the master secret in coeffs[0]) is no longer
+    // needed; wipe it before it goes out of scope.
+    coeffs.zeroize();
 
     for i in 1..=max_signers {
         for j in (i + 1)..=max_signers {

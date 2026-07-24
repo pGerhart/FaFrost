@@ -25,6 +25,8 @@ pub enum Error {
     MissingBlindingCommitment { from: Identifier, about: Identifier },
     /// The key package lacks the pairwise key shared with the given peer.
     MissingPairwiseKey(Identifier),
+    /// A serialized message had the wrong length or a non-canonical encoding.
+    MalformedEncoding,
 }
 
 impl fmt::Display for Error {
@@ -57,6 +59,12 @@ impl fmt::Display for Error {
             }
             Error::MissingPairwiseKey(id) => {
                 write!(f, "no pairwise key for peer {id} in the key package")
+            }
+            Error::MalformedEncoding => {
+                write!(
+                    f,
+                    "message has the wrong length or a non-canonical encoding"
+                )
             }
         }
     }

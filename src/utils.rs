@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::vec::Vec;
 
-use ff::{Field, PrimeField};
+use ff::Field;
 
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
 use crate::keygen::Identifier;
@@ -117,27 +117,4 @@ pub fn pedersen_commit<C: Ciphersuite>(
 /// through the ciphersuite's own hash family (no hardcoded hash).
 pub fn hash_pairwise_key_commitment<C: Ciphersuite>(k_ij: &[u8; 32]) -> [u8; 32] {
     C::hash_commitment(&[C::CONTEXT.as_bytes(), b"/Hvk", k_ij])
-}
-
-pub fn scalar_bytes<C: Ciphersuite>(scalar: &C::Scalar) -> Vec<u8> {
-    scalar.to_repr().as_ref().to_vec()
-}
-
-pub fn scalar_to_hex<C: Ciphersuite>(scalar: &C::Scalar) -> String {
-    hex::encode(scalar.to_repr().as_ref())
-}
-
-pub fn scalar_from_hex<C: Ciphersuite>(
-    hex_string: &str,
-) -> Result<C::Scalar, Box<dyn std::error::Error>> {
-    let bytes_vec = hex::decode(hex_string)?;
-
-    let mut repr = <C::Scalar as PrimeField>::Repr::default();
-    if bytes_vec.len() != repr.as_ref().len() {
-        return Err("scalar hex has wrong length for this ciphersuite".into());
-    }
-    repr.as_mut().copy_from_slice(&bytes_vec);
-
-    Option::<C::Scalar>::from(C::Scalar::from_repr(repr))
-        .ok_or_else(|| "scalar is not canonical modulo the group order".into())
 }

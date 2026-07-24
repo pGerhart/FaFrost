@@ -2,11 +2,16 @@
 name = "fafrost"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.85"
 license = "Apache-2.0"
 authors = ["Paul Gerhart"]
+description = "Fully adaptive FROST: a two-round threshold Schnorr signature scheme with identifiable aborts"
+repository = "https://github.com/pGerhart/FaFrost"
+keywords = ["threshold", "schnorr", "signature", "frost", "cryptography"]
+categories = ["cryptography"]
 
 [dependencies]
-rand = "0.10"
+rand = { version = "0.10", features = ["chacha"] }
 rand_core = "0.10"
 sha2 = "0.11"
 k256 = { version = "0.14", default-features = false, features = [

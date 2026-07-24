@@ -7,6 +7,7 @@ use ff::{Field, FromUniformBytes};
 use group::Group;
 use merlin::Transcript;
 use rand_core::CryptoRng;
+use zeroize::Zeroize;
 
 use crate::ciphersuite::{Ciphersuite, ScalarHasher};
 use crate::error::{Error, Result};
@@ -14,8 +15,9 @@ use crate::keygen::{Identifier, KeyPackage, PublicKeyPackage};
 use crate::sign::{SignatureShare, SigningPackage};
 use crate::utils::{
     binding_factor, blinding_base, blinding_randomizer, delta, encode_commitments,
-    encode_signer_set, hash_pairwise_key_commitment, lagrange, pedersen_commit, scalar_bytes,
+    encode_signer_set, hash_pairwise_key_commitment, lagrange, pedersen_commit,
 };
+use crate::wire::scalar_bytes;
 
 #[derive(Clone)]
 pub struct IA1Message<C: Ciphersuite> {
@@ -322,8 +324,8 @@ fn prove_wellformed<C: Ciphersuite, R: CryptoRng>(
     let c = sig_challenge::<C>(signing_package, pubkeys);
     let lambda_i = lagrange::<C>(i, &ids);
 
-    let r_sk = C::Scalar::random(&mut *rng);
-    let r_sk_blinding = C::Scalar::random(&mut *rng);
+    let mut r_sk = C::Scalar::random(&mut *rng);
+    let mut r_sk_blinding = C::Scalar::random(&mut *rng);
 
     let mut r_blind = BTreeMap::new();
     let mut r_blind_blinding = BTreeMap::new();
@@ -393,7 +395,7 @@ fn prove_wellformed<C: Ciphersuite, R: CryptoRng>(
         );
     }
 
-    WellformedProof {
+    let proof = WellformedProof {
         t_sig,
         t_key,
         t_blind,
@@ -401,7 +403,20 @@ fn prove_wellformed<C: Ciphersuite, R: CryptoRng>(
         z_sk_blinding: r_sk_blinding + challenge * key_package.signing_share_blinding,
         z_blind,
         z_blind_blinding,
+    };
+
+    // The commitment randomness is a secret blind on the witness; wipe it once the
+    // responses are formed so it does not linger on the stack.
+    r_sk.zeroize();
+    r_sk_blinding.zeroize();
+    for r in r_blind.values_mut() {
+        r.zeroize();
     }
+    for r in r_blind_blinding.values_mut() {
+        r.zeroize();
+    }
+
+    proof
 }
 
 fn verify_wellformed_proof<C: Ciphersuite>(
