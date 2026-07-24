@@ -5,9 +5,9 @@
 //! identifiable-abort extension. The protocol logic is generic over a
 //! [`Ciphersuite`]; three are provided:
 //!
-//! - [`Secp256k1Plain`] — generic Schnorr over secp256k1.
-//! - [`Secp256k1Bip340`] — Bitcoin/BIP-340 Taproot key-spend signatures.
-//! - [`Ed25519`] — RFC 8032 Ed25519; aggregate signatures verify under any
+//! - [`Secp256k1Plain`]: generic Schnorr over secp256k1.
+//! - [`Secp256k1Bip340`]: Bitcoin/BIP-340 Taproot key-spend signatures.
+//! - [`Ed25519`]: RFC 8032 Ed25519; aggregate signatures verify under any
 //!   compliant EdDSA verifier.
 //!
 //! ## Entry points
