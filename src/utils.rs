@@ -35,10 +35,8 @@ pub(crate) fn delta<C: Ciphersuite>(i: Identifier, j: Identifier) -> C::Scalar {
     }
 }
 
-/// Binding factor `b = H_non(vk, S, m, {D_j, E_j})`.
-///
-/// The single source of truth for the FROST binding factor: both `sign` and the
-/// identifiable-abort path derive `b` here, so the two can never drift apart.
+/// Binding factor `b = H_non(vk, S, m, {D_j, E_j})`, shared by signing and the
+/// identifiable-abort path.
 pub(crate) fn binding_factor<C: Ciphersuite>(
     verifying_key: &C::Point,
     signer_set_bytes: &[u8],
@@ -105,7 +103,7 @@ pub fn encode_commitments<C: Ciphersuite>(
     out
 }
 
-pub fn pedersen_commit<C: Ciphersuite>(
+pub(crate) fn pedersen_commit<C: Ciphersuite>(
     value: C::Scalar,
     blinding: C::Scalar,
     h: C::Point,
@@ -115,6 +113,6 @@ pub fn pedersen_commit<C: Ciphersuite>(
 
 /// Commitment `K_{i,j} = H_pk(k_{i,j})` to a 32-byte pairwise key, derived
 /// through the ciphersuite's own hash family (no hardcoded hash).
-pub fn hash_pairwise_key_commitment<C: Ciphersuite>(k_ij: &[u8; 32]) -> [u8; 32] {
+pub(crate) fn hash_pairwise_key_commitment<C: Ciphersuite>(k_ij: &[u8; 32]) -> [u8; 32] {
     C::hash_commitment(&[C::CONTEXT.as_bytes(), b"/Hvk", k_ij])
 }

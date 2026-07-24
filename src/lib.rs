@@ -16,7 +16,7 @@
 //! [`sign::aggregate`] for the two signing rounds, [`verify()`], and the
 //! identifiable-abort rounds in [`ia`]. Message wire formats live in [`wire`].
 //! Functions that consume data from a coordinator or from other (possibly
-//! malicious) signers return [`Result`] rather than panicking; see [`error`].
+//! malicious) signers return [`Result`] on malformed input; see [`error`].
 //!
 //! ## Side channels
 //!
@@ -53,8 +53,10 @@ pub use ciphersuite::{bip340, ed25519, secp256k1};
 pub use ia::*;
 pub use keygen::*;
 pub use sign::*;
-pub use utils::*;
-pub use verify::*;
+pub use verify::verify;
+
+// `utils` holds internal protocol helpers; its one public item (`encode_commitments`,
+// used by the benches) stays reachable at `fafrost::utils::` rather than the root.
 
 // The serialisers stay unexported at the crate root: both `bip340` and `ed25519`
 // define a `signature_to_bytes`, so they are reached through their module path.

@@ -2,10 +2,10 @@
 //!
 //! Each `to_bytes` is a fixed-length concatenation of compressed group elements
 //! and scalars in the ciphersuite's canonical encoding; each `from_bytes` rejects
-//! wrong-length or non-canonical inputs with [`Error::MalformedEncoding`] rather
-//! than panicking. Scheme-specific signature formats (RFC 8032, BIP-340) are
-//! produced by the per-ciphersuite serialisers in the `ed25519` / `bip340`
-//! modules; the [`Signature`] encoding here is the curve-agnostic `R \Vert z`.
+//! wrong-length or non-canonical inputs with [`Error::MalformedEncoding`].
+//! Scheme-specific signature formats (RFC 8032, BIP-340) are produced by the
+//! per-ciphersuite serialisers in the `ed25519` / `bip340` modules; the
+//! [`Signature`] encoding here is the curve-agnostic `R \Vert z`.
 #![allow(non_snake_case)]
 
 use std::vec::Vec;

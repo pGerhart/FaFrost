@@ -154,7 +154,7 @@ pub fn aggregate<C: Ciphersuite>(
 
         match R_opt {
             // Every share must carry the same aggregate nonce R; a disagreement
-            // is an adversarial or malformed share, not a reason to crash.
+            // means an adversarial or malformed share.
             Some(R) if R != share.R => return Err(Error::InconsistentAggregateNonce),
             Some(_) => {}
             None => R_opt = Some(share.R),
