@@ -1,4 +1,4 @@
-# FaFrost benchmark results
+# FaFROST benchmark results
 
 Median runtimes per signer, measured with `cargo bench` (Criterion).
 

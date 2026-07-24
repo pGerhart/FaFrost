@@ -1,14 +1,15 @@
-# FaFrost — Fully Adaptive Frost with Identifiable Aborts from AOMDL
+# FaFROST — Fully Adaptive FROST with Identifiable Aborts from AOMDL
 
 [![CI](https://github.com/pGerhart/FaFrost/actions/workflows/ci.yml/badge.svg)](https://github.com/pGerhart/FaFrost/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.85-blue.svg)](Cargo.toml)
 [![unsafe forbidden](https://img.shields.io/badge/unsafe-forbidden-success.svg)](https://github.com/rust-secure-code/safety-dance/)
 
-A reference implementation of **FaFrost**, a two-round threshold Schnorr signature scheme with **fully adaptive security under AOMDL** and an **identifiable-abort** extension, from the paper:
+A reference implementation of **FaFROST**, a two-round threshold Schnorr signature scheme with **fully adaptive security under AOMDL** and an **identifiable-abort** extension, from the paper:
 
-> **Fully Adaptive Frost with Identifiable Aborts from AOMDL**  
-> Ruben Baecker, Paul Gerhart, Davide Li Calsi, Luigi Russo, Dominique Schröder, Arkady Yerukhimovich.
+> **[Fully Adaptive FROST with Identifiable Aborts from AOMDL](https://eprint.iacr.org/2025/1950)**  
+> Ruben Baecker, Paul Gerhart, Davide Li Calsi, Luigi Russo, Dominique Schröder, Arkady Yerukhimovich.  
+> Cryptology ePrint Archive, Paper 2025/1950.
 
 The crate implements the full signing stack (dealer key generation, two-round signing with pairwise blinding, aggregation, verification, and identifiable aborts), generic over a `Ciphersuite`. Three ciphersuites ship:
 
@@ -64,7 +65,7 @@ This repository is meant to reproduce the paper's claims.
 
 ## EdDSA / Ed25519 interop
 
-FaFrost operates entirely in the prime-order subgroup of edwards25519, so an aggregate `(R, s)` under the `Ed25519` ciphersuite is a valid RFC 8032 signature: `[s]B = R + [k]A` with `k = SHA512(R‖A‖M) mod L` and the standard 32-byte encodings. The test `ed25519_interop_with_dalek` verifies a FaFrost threshold signature with the **independent** `ed25519-dalek` implementation on both the standard and strict (`verify_strict`) paths:
+FaFROST operates entirely in the prime-order subgroup of edwards25519, so an aggregate `(R, s)` under the `Ed25519` ciphersuite is a valid RFC 8032 signature: `[s]B = R + [k]A` with `k = SHA512(R‖A‖M) mod L` and the standard 32-byte encodings. The test `ed25519_interop_with_dalek` verifies a FaFROST threshold signature with the **independent** `ed25519-dalek` implementation on both the standard and strict (`verify_strict`) paths:
 
 ```rust
 let vk  = VerifyingKey::from_bytes(&fafrost::ed25519::verifying_key_bytes(&pubkeys))?;
@@ -99,4 +100,4 @@ HTML reports go to `target/criterion/`; pinned results are in [`benches/bench_re
 
 ## Demo transaction
 
-To exercise FaFrost's Bitcoin compatibility, we used it to construct and broadcast a real Bitcoin testnet Taproot key-spend transaction: the live Bitcoin network accepts a FaFrost threshold signature as an ordinary single-key spend, even though no party ever holds the whole signing key. The full walkthrough (commands, the broadcast transaction, and on-chain screenshots) is in [`bitcoin-demo/README.md`](bitcoin-demo/README.md).
+To exercise FaFROST's Bitcoin compatibility, we used it to construct and broadcast a real Bitcoin testnet Taproot key-spend transaction: the live Bitcoin network accepts a FaFROST threshold signature as an ordinary single-key spend, even though no party ever holds the whole signing key. The full walkthrough (commands, the broadcast transaction, and on-chain screenshots) is in [`bitcoin-demo/README.md`](bitcoin-demo/README.md).

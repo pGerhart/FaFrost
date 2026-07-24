@@ -1,6 +1,6 @@
-//! # FaFrost - fully adaptive Frost threshold Schnorr signatures
+//! # FaFROST - fully adaptive FROST threshold Schnorr signatures
 //!
-//! A curve-agnostic reference implementation of FaFrost, a two-round threshold
+//! A curve-agnostic reference implementation of FaFROST, a two-round threshold
 //! Schnorr signature scheme with fully adaptive security under AOMDL and an
 //! identifiable-abort extension. The protocol logic is generic over a
 //! [`Ciphersuite`]; three are provided:

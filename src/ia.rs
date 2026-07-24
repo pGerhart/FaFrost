@@ -590,7 +590,7 @@ fn proof_challenge<C: Ciphersuite>(
     b: C::Scalar,
     c: C::Scalar,
 ) -> C::Scalar {
-    let mut transcript = Transcript::new(b"FaFrost/IAProof");
+    let mut transcript = Transcript::new(b"FaFROST/IAProof");
     transcript.append_message(b"ctx", C::CONTEXT.as_bytes());
 
     transcript.append_message(b"signer", &signature_share.identifier.to_be_bytes());

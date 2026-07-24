@@ -1,4 +1,4 @@
-scheme: FaFrost-secp256k1-bip340
+scheme: FaFROST-secp256k1-bip340
 max_signers: 3
 min_signers: 2
 secret_key_hex: 199ae54e932e19a60f2f3dddc406f612580c78f54abadec13014f0fd34d33b1c
