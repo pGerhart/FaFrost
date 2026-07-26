@@ -68,6 +68,8 @@ This repository is meant to reproduce the paper's claims.
 FaFROST operates entirely in the prime-order subgroup of edwards25519, so an aggregate `(R, s)` under the `Ed25519` ciphersuite is a valid RFC 8032 signature: `[s]B = R + [k]A` with `k = SHA512(R‖A‖M) mod L` and the standard 32-byte encodings. The test `ed25519_interop_with_dalek` verifies a FaFROST threshold signature with the **independent** `ed25519-dalek` implementation on both the standard and strict (`verify_strict`) paths:
 
 ```rust
+// `agg` is the aggregate signature from `aggregate(...)`; `pubkeys` and `message`
+// are the group key and message of the same signing session.
 let vk  = VerifyingKey::from_bytes(&fafrost::ed25519::verifying_key_bytes(&pubkeys))?;
 let sig = Signature::from_bytes(&fafrost::ed25519::signature_to_bytes(&agg));
 assert!(vk.verify_strict(&message, &sig).is_ok());
